@@ -4,14 +4,20 @@ import sys
 from unittest.mock import MagicMock, patch
 
 import numpy as np
+import pytest
 
 from eq_cli.loop import (
     _read_hotkey,
     _restore_posix_terminal,
     _save_posix_terminal,
+    _save_profile_export,
+    _save_snapshot,
     extract_channel_samples,
     interpret_hotkey,
 )
+from eq_cli.profile import load_profile
+from eq_cli.renderer import RenderFrame, TerminalRenderer
+from eq_cli.spectrum import build_log_frequency_centers
 
 
 def test_interpret_hotkey_maps_expected_actions() -> None:
@@ -19,6 +25,8 @@ def test_interpret_hotkey_maps_expected_actions() -> None:
     assert interpret_hotkey("f") == "toggle_freeze"
     assert interpret_hotkey("F") == "toggle_freeze"
     assert interpret_hotkey("r") == "reset_peaks"
+    assert interpret_hotkey("s") == "snapshot"
+    assert interpret_hotkey("p") == "export_profile"
     assert interpret_hotkey("q") == "quit"
 
 
@@ -121,3 +129,86 @@ def test_read_hotkey_posix_returns_key_when_data_available() -> None:
         result = _read_hotkey()
 
     assert result == "f"
+
+
+def test_save_snapshot_writes_plain_text_without_ansi(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Plain-text snapshots should strip ANSI color codes from saved output."""
+    renderer = TerminalRenderer(color_enabled=True, show_axis_labels=True)
+    frame = RenderFrame(
+        frequencies_hz=tuple(build_log_frequency_centers(20.0, 20_000.0, 32)),
+        levels_db=tuple([0.0] * 32),
+    )
+    monkeypatch.setattr("eq_cli.loop.time.strftime", lambda _fmt: "20260414-120000")
+
+    snapshot_path = _save_snapshot(
+        renderer=renderer,
+        frame=frame,
+        snapshot_format="txt",
+        snapshot_file=None,
+        snapshot_dir=str(tmp_path),
+        title_text="eq-cli studio",
+    )
+
+    content = snapshot_path.read_text(encoding="utf-8")
+
+    assert snapshot_path.name == "eq-cli-snapshot-20260414-120000-eq-cli-studio.txt"
+    assert "\x1b[" not in content
+
+
+def test_save_snapshot_uses_explicit_file_path(tmp_path) -> None:
+    """Explicit snapshot file should win over auto-generated naming."""
+    renderer = TerminalRenderer(color_enabled=False, show_title=False)
+    frame = RenderFrame(
+        frequencies_hz=tuple(build_log_frequency_centers(20.0, 20_000.0, 32)),
+        levels_db=tuple([0.0] * 32),
+        freeze_enabled=True,
+    )
+    snapshot_file = tmp_path / "captures" / "current.ansi"
+
+    snapshot_path = _save_snapshot(
+        renderer=renderer,
+        frame=frame,
+        snapshot_format="ansi",
+        snapshot_file=str(snapshot_file),
+        snapshot_dir=None,
+        title_text="eq-cli studio",
+    )
+
+    assert snapshot_path == snapshot_file
+    assert snapshot_path.exists()
+
+
+def test_save_profile_export_uses_incrementing_file_names(tmp_path) -> None:
+    """Profile exports should use the next numbered filename in the target folder."""
+    (tmp_path / "eq-cli-profile-001.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "eq-cli-profile-002.json").write_text("{}", encoding="utf-8")
+
+    export_path = _save_profile_export(
+        {
+            "gain": 3.5,
+            "graph_height": 24,
+            "graph_width": 140,
+            "refresh_rate": 45.0,
+            "block_size": 2048,
+            "axis_frequencies": (50.0, 100.0, 1000.0, 5000.0),
+            "peak_db_labels": True,
+            "snapshot_file": "captures/current.txt",
+            "snapshot_format": "ansi",
+        },
+        export_dir=str(tmp_path),
+    )
+
+    loaded_profile = load_profile(str(export_path), export_path.stem)
+
+    assert export_path.name == "eq-cli-profile-003.json"
+    assert loaded_profile["gain"] == 3.5
+    assert loaded_profile["graph_height"] == 24
+    assert loaded_profile["refresh_rate"] == 45.0
+    assert loaded_profile["block_size"] == 2048
+    assert loaded_profile["axis_frequencies"] == (50.0, 100.0, 1000.0, 5000.0)
+    assert loaded_profile["peak_db_labels"] is True
+    assert loaded_profile["snapshot_file"] == "captures/current.txt"
+    assert loaded_profile["snapshot_format"] == "ansi"

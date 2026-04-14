@@ -6,22 +6,35 @@ Terminal-based real-time equalizer for live audio input.
 
 - Python 3.12 or newer
 - pip
+- A virtual environment for installation on macOS and most Linux distributions
 
 ## Installation
 
-### Step 1. Install dependencies
+On macOS, Python installed via Homebrew is usually an externally managed
+environment. Installing with `pip install .` against the system interpreter can
+fail with `externally-managed-environment`. Use a virtual environment instead.
+
+### Step 1. Create and activate a virtual environment
 
 ```sh
-pip install -r requirements.txt
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
 ```
 
-Or install directly from the project folder:
+### Step 2. Install the package
 
 ```sh
-pip install .
+python -m pip install .
 ```
 
-### Step 2. Verify the install
+For development, use an editable install instead:
+
+```sh
+python -m pip install -e .
+```
+
+### Step 3. Verify the install
 
 ```sh
 eq-cli --help
@@ -81,16 +94,69 @@ Note: higher refresh rates increase CPU usage and may require smaller stream
 blocks; this tool automatically adjusts stream block size based on the chosen
 refresh rate.
 
+### Set an explicit audio block size
+
+```sh
+eq-cli --device <identifier-or-name> --block-size 2048
+```
+
+`--block-size` overrides the auto-tuned audio callback size when you want more
+direct control over latency and stability.
+
+### Save a one-shot chart snapshot
+
+```sh
+eq-cli --device <identifier-or-name> --snapshot-file snapshots/current.txt
+eq-cli --device <identifier-or-name> --snapshot-file snapshots/current.ansi --snapshot-format ansi
+```
+
+`--snapshot-file` captures the first usable chart frame, writes it to disk, and
+exits. Use `--snapshot-format txt` for plain text or `--snapshot-format ansi`
+to preserve terminal color codes.
+
+### Set a custom graph height
+
+```sh
+eq-cli --device <identifier-or-name> --graph-height 14
+```
+
+`--graph-height` controls the number of rendered spectrum rows. If omitted, the
+height is derived from the current dB scale. `--db-interval` controls dB label
+density on the vertical axis rather than the physical graph height.
+
 ### Enable axis labels (opt-in)
 
 ```sh
 eq-cli --device <identifier-or-name> --axis-labels
 ```
 
+When axis labels are enabled, matching notches are drawn on the horizontal and
+vertical axes so labeled frequencies and dB markers are easier to follow.
+
+### Use custom horizontal label frequencies
+
+```sh
+eq-cli --device <identifier-or-name> --axis-labels --axis-frequencies 50,100,200,500,1000,5000
+```
+
+`--axis-frequencies` accepts a comma- or space-separated list of frequencies in
+Hz. Labels outside the visible analysis range are skipped automatically.
+
+### Show numeric dB labels on peak markers
+
+```sh
+eq-cli --device <identifier-or-name> --peak-db-labels
+```
+
+`--peak-db-labels` overlays rounded absolute peak dB values above the matching peak band
+when that band is wide enough and there is a free row above the peak. Use
+`--no-peak-db-labels` to explicitly disable them when a profile enables them.
+
 ### Configure title and dB marker style
 
 ```sh
 eq-cli --device <identifier-or-name> --no-title --db-marker-style minimal
+eq-cli --device <identifier-or-name> --graph-height 12 --db-marker-style all
 ```
 
 ### Configure peak hold behavior
@@ -138,6 +204,10 @@ bar color.
 eq-cli --device <identifier-or-name> --profile-file profiles/theme_profiles.json --profile studio
 ```
 
+Profile files can now carry both visual styling and runtime tuning values such
+as `gain`, `refresh_rate`, `block_size`, `axis_frequencies`, `snapshot_file`,
+`snapshot_format`, and `snapshot_dir`.
+
 ### Use a built-in profile directly
 
 ```sh
@@ -147,7 +217,7 @@ eq-cli --device <identifier-or-name> --profile studio
 Built-in profiles:
 
 - `default`: current standard layout and colors
-- `studio`: title on, labels on, sparse dB markers, bright colors, `absolute` volume mode, `peak_hold_frames=12`
+- `studio`: tall wide graph, no history rows, underscore peak markers, sparse dB markers, bright colors, `absolute` volume mode, `db_range=-76..0`, `peak_hold_frames=12`, runtime snapshots default to ANSI format in `snapshots/`
 - `green-based`: green-focused profile with axis/labels/bars/history in green tones and `peak_hold_frames=6`
 - `minimal`: compact monochrome-style layout with minimal labeling
 - `high-contrast`: labels on, dense markers, strong contrast colors, `peak_hold_frames=4`
@@ -214,7 +284,24 @@ During runtime on supported terminals (Windows, macOS, Linux), keyboard hotkeys 
 
 - `f`: freeze/unfreeze the display
 - `r`: reset peak markers
+- `s`: save a snapshot of the current chart
+- `p`: export the current effective profile settings
 - `q`: quit
+
+Runtime snapshots are written to the current working directory by default. You
+can override the target directory with:
+
+```sh
+eq-cli --device <identifier-or-name> --snapshot-dir snapshots
+```
+
+The built-in `studio` profile defaults runtime snapshots to ANSI output in the
+`snapshots/` directory.
+
+Runtime profile exports are written to the current working directory as
+`eq-cli-profile-001.json`, `eq-cli-profile-002.json`, and so on. Each file is a
+valid profile file containing one profile named after the file stem, including
+the current runtime tuning values that can be loaded back with `--profile-file`.
 
 The shortcuts/status legend is shown on-screen by default and includes freeze
 state (`ON`/`OFF`). You can hide it with:
@@ -234,15 +321,15 @@ eq-cli --device <identifier-or-name> --no-shortcuts
 ## Running tests
 
 ```sh
-pip install pytest
-pytest
+python -m pip install -e . pytest
+python -m pytest
 ```
 
 ## Linting and type checking
 
 ```sh
-pip install ruff mypy
-ruff check .
-mypy src
+python -m pip install -e . ruff mypy
+python -m ruff check .
+python -m mypy src
 ```
 

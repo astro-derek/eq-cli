@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import json
 import os
 import queue
+import re
 import select
 import sys
 import time
 from collections import deque
-from typing import Literal
+from collections.abc import Sequence
+from pathlib import Path
+from typing import Literal, Protocol, TypeAlias, cast
 
 import numpy as np
 import numpy.typing as npt
@@ -14,6 +18,7 @@ import sounddevice as sd  # type: ignore[import-untyped]
 
 from eq_cli.audio import AudioInputDevice
 from eq_cli.peaks import PeakTracker
+from eq_cli.profile import RenderProfile
 from eq_cli.renderer import RenderFrame, TerminalRenderer
 from eq_cli.spectrum import AudioFrame, SpectrumProcessor
 
@@ -25,8 +30,27 @@ DEFAULT_REFRESH_RATE = 30.0
 _HIDE_CURSOR = "\x1b[?25l"
 _SHOW_CURSOR = "\x1b[?25h"
 
-HotkeyAction = Literal["none", "toggle_freeze", "reset_peaks", "quit"]
+HotkeyAction = Literal[
+    "none",
+    "toggle_freeze",
+    "reset_peaks",
+    "snapshot",
+    "export_profile",
+    "quit",
+]
 ChannelMode = Literal["mono", "left", "right", "sum", "mid", "side"]
+TerminalAttributeValue: TypeAlias = int | bytes
+TerminalAttributes: TypeAlias = list[int | list[TerminalAttributeValue]]
+
+
+class _MsvcrtModule(Protocol):
+    """Subset of the Windows keyboard API used by the input loop."""
+
+    def kbhit(self) -> bool:
+        """Return whether a keyboard event is waiting."""
+
+    def getwch(self) -> str:
+        """Return the next wide character from the console."""
 
 
 def interpret_hotkey(key: str | None) -> HotkeyAction:
@@ -38,12 +62,73 @@ def interpret_hotkey(key: str | None) -> HotkeyAction:
         return "toggle_freeze"
     if normalized == "r":
         return "reset_peaks"
+    if normalized == "s":
+        return "snapshot"
+    if normalized == "p":
+        return "export_profile"
     if normalized == "q":
         return "quit"
     return "none"
 
 
-def _save_posix_terminal() -> list[object] | None:
+def _sanitize_snapshot_fragment(value: str) -> str:
+    """Return an ASCII-safe filename fragment for snapshot naming."""
+    sanitized = re.sub(r"[^A-Za-z0-9._-]+", "-", value.strip().lower())
+    sanitized = sanitized.strip("-.")
+    return sanitized or "chart"
+
+
+def _save_snapshot(
+    renderer: TerminalRenderer,
+    frame: RenderFrame,
+    snapshot_format: Literal["txt", "ansi"],
+    snapshot_file: str | None,
+    snapshot_dir: str | None,
+    title_text: str,
+) -> Path:
+    """Serialize and write a snapshot to disk, returning the saved path."""
+    if snapshot_file is not None:
+        snapshot_path = Path(snapshot_file)
+    else:
+        base_dir = Path(snapshot_dir) if snapshot_dir is not None else Path.cwd()
+        timestamp = time.strftime("%Y%m%d-%H%M%S")
+        title_fragment = _sanitize_snapshot_fragment(title_text)
+        frozen_suffix = "-frozen" if frame.freeze_enabled else ""
+        snapshot_path = base_dir / (
+            f"eq-cli-snapshot-{timestamp}-{title_fragment}{frozen_suffix}."
+            f"{snapshot_format}"
+        )
+
+    snapshot_path.parent.mkdir(parents=True, exist_ok=True)
+    snapshot_text = renderer.render_snapshot(frame, snapshot_format=snapshot_format)
+    snapshot_path.write_text(snapshot_text, encoding="utf-8")
+    return snapshot_path
+
+
+def _next_profile_export_path(base_dir: Path) -> Path:
+    """Return the next numbered profile export path inside the target folder."""
+    index = 1
+    while True:
+        candidate = base_dir / f"eq-cli-profile-{index:03d}.json"
+        if not candidate.exists():
+            return candidate
+        index += 1
+
+
+def _save_profile_export(
+    export_profile: RenderProfile,
+    export_dir: str | None = None,
+) -> Path:
+    """Serialize and write the current effective profile settings to disk."""
+    base_dir = Path(export_dir) if export_dir is not None else Path.cwd()
+    base_dir.mkdir(parents=True, exist_ok=True)
+    export_path = _next_profile_export_path(base_dir)
+    payload = {"profiles": {export_path.stem: export_profile}}
+    export_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    return export_path
+
+
+def _save_posix_terminal() -> TerminalAttributes | None:
     """Put stdin into cbreak mode and return saved attrs, or None if unavailable."""
     if os.name == "nt" or not sys.stdin.isatty():
         return None
@@ -53,12 +138,12 @@ def _save_posix_terminal() -> list[object] | None:
     except ImportError:
         return None
     fd = sys.stdin.fileno()
-    saved: list[object] = termios.tcgetattr(fd)  # type: ignore[attr-defined]
-    tty.setcbreak(fd)  # type: ignore[attr-defined]
+    saved = cast(TerminalAttributes, termios.tcgetattr(fd))
+    tty.setcbreak(fd)
     return saved
 
 
-def _restore_posix_terminal(saved: list[object] | None) -> None:
+def _restore_posix_terminal(saved: TerminalAttributes | None) -> None:
     """Restore terminal attrs previously saved by _save_posix_terminal."""
     if saved is None:
         return
@@ -67,7 +152,7 @@ def _restore_posix_terminal(saved: list[object] | None) -> None:
     except ImportError:
         return
     try:
-        termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, saved)  # type: ignore[attr-defined]
+        termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, saved)
     except OSError:
         pass
 
@@ -81,9 +166,10 @@ def _read_hotkey() -> str | None:
             import msvcrt
         except ImportError:
             return None
-        if not msvcrt.kbhit():
+        msvcrt_module = cast(_MsvcrtModule, msvcrt)
+        if not msvcrt_module.kbhit():
             return None
-        character = msvcrt.getwch()
+        character = msvcrt_module.getwch()
         return character if isinstance(character, str) else None
     # POSIX: non-blocking check via select then read one char.
     try:
@@ -130,13 +216,17 @@ def run_equalizer(
     db_min: float = -80.0,
     db_max: float = 6.0,
     db_interval: float = 10.0,
+    graph_height: int = 0,
     volume_mode: Literal["relative", "absolute"] = "relative",
     channel_mode: ChannelMode = "mono",
     refresh_rate: float = DEFAULT_REFRESH_RATE,
+    block_size: int | None = None,
     graph_width: int = 120,
     band_gap: int = 0,
+    axis_frequencies: Sequence[float] | None = None,
     bar_char: str = "#",
     peak_char: str = "-",
+    peak_db_labels: bool = False,
     peak_hold_frames: int = 0,
     history_rows: int = 0,
     history_gradient: str = " .:-=+*#%@",
@@ -150,6 +240,10 @@ def run_equalizer(
     history_color_code: str | None = None,
     axis_color_code: str | None = None,
     label_color_code: str | None = None,
+    snapshot_file: str | None = None,
+    snapshot_format: Literal["txt", "ansi"] = "txt",
+    snapshot_dir: str | None = None,
+    export_profile: RenderProfile | None = None,
 ) -> int:
     """Start the real-time equalizer render loop for the selected input device.
 
@@ -159,13 +253,17 @@ def run_equalizer(
         db_min: Bottom of the displayed dB scale.
         db_max: Top of the displayed dB scale.
         db_interval: Row spacing in dB.
+        graph_height: Number of rendered graph rows. Defaults to the dB scale.
         volume_mode: Volume mapping mode ('relative' or 'absolute').
         channel_mode: Input channel analysis mode.
         refresh_rate: Maximum redraw rate in frames per second.
+        block_size: Audio callback block size. Defaults to an automatic value.
         graph_width: Width of the rendered graph area in characters.
         band_gap: Number of spaces inserted between adjacent bands.
+        axis_frequencies: Optional custom frequency labels for the horizontal axis.
         bar_char: Character used to draw active bars.
         peak_char: Character used to draw peak markers.
+        peak_db_labels: Whether to overlay numeric dB labels for peak markers.
         peak_hold_frames: Frames to hold peaks before decay.
         history_rows: Number of history rows to render below the spectrum.
         history_gradient: Character gradient used for history rendering.
@@ -179,6 +277,10 @@ def run_equalizer(
         history_color_code: Optional ANSI color for history rows.
         axis_color_code: Optional ANSI color for axis baseline.
         label_color_code: Optional ANSI color for axis labels/title.
+        snapshot_file: Optional one-shot snapshot output file path.
+        snapshot_format: Snapshot serialization format ('txt' or 'ansi').
+        snapshot_dir: Output directory for runtime hotkey snapshots.
+        export_profile: Effective profile-compatible settings for runtime export.
 
     Returns:
         Process exit code.
@@ -186,13 +288,17 @@ def run_equalizer(
     device_index: int | None = (
         int(device.identifier) if device.identifier.isdigit() else None
     )
+    if graph_height < 0:
+        raise ValueError("Graph height must be zero or greater.")
     if refresh_rate <= 0.0:
         raise ValueError("Refresh rate must be greater than zero.")
+    if block_size is not None and block_size <= 0:
+        raise ValueError("Block size must be greater than zero.")
     if history_rows < 0:
         raise ValueError("History rows must be zero or greater.")
     stream_channels = 1 if channel_mode in {"mono", "left"} else 2
 
-    stream_block_size = max(128, int(SAMPLE_RATE / refresh_rate))
+    stream_block_size = block_size or max(128, int(SAMPLE_RATE / refresh_rate))
     render_period = 1.0 / refresh_rate
 
     frame_queue: queue.Queue[npt.NDArray[np.float64]] = queue.Queue(maxsize=4)
@@ -228,10 +334,13 @@ def run_equalizer(
         db_min=db_min,
         db_max=db_max,
         db_interval=db_interval,
+        graph_height=graph_height,
         graph_width=graph_width,
         band_gap=band_gap,
+        axis_frequencies=axis_frequencies,
         bar_char=bar_char,
         peak_char=peak_char,
+        peak_db_labels=peak_db_labels,
         history_rows=history_rows,
         history_gradient=history_gradient,
         show_shortcuts=show_shortcuts,
@@ -290,6 +399,17 @@ def run_equalizer(
                             history_levels_db=latest_frame.history_levels_db,
                             freeze_enabled=frozen,
                         )
+                elif action == "snapshot" and latest_frame is not None:
+                    _save_snapshot(
+                        renderer=renderer,
+                        frame=latest_frame,
+                        snapshot_format=snapshot_format,
+                        snapshot_file=None,
+                        snapshot_dir=snapshot_dir,
+                        title_text=title_text or "eq-cli",
+                    )
+                elif action == "export_profile" and export_profile is not None:
+                    _save_profile_export(export_profile)
 
                 try:
                     raw = frame_queue.get(timeout=0.02)
@@ -321,6 +441,18 @@ def run_equalizer(
                         history_levels_db=tuple(history) if history_rows > 0 else None,
                         freeze_enabled=frozen,
                     )
+
+                    if snapshot_file is not None:
+                        saved_path = _save_snapshot(
+                            renderer=renderer,
+                            frame=latest_frame,
+                            snapshot_format=snapshot_format,
+                            snapshot_file=snapshot_file,
+                            snapshot_dir=snapshot_dir,
+                            title_text=title_text or "eq-cli",
+                        )
+                        print(f"Saved snapshot: {saved_path}")
+                        return 0
 
                 now = time.perf_counter()
                 if latest_frame is not None and now >= next_render_time:

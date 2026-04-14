@@ -66,6 +66,9 @@ This checklist is the working execution tracker for the MVP. It should be update
 - [x] Feature 0018: Independent history color control
   - Status: completed
   - Goal: allow CLI/profile customization of history row color independently from active bars
+- [x] Feature 0019: Chart snapshot save
+  - Status: completed
+  - Goal: save the current chart to disk either from a one-shot CLI flow or a runtime hotkey
 
 ## Update Rules
 - Mark a feature in progress when implementation begins.

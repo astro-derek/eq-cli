@@ -26,7 +26,10 @@ def test_main_returns_success_for_help(capsys: pytest.CaptureFixture[str]) -> No
     assert "usage:" in captured.out
     assert "Capture live audio from an input device" in captured.out
     assert "Usability Tips:" in captured.out
-    assert "Runtime keys: f=freeze, r=reset peaks, q=quit" in captured.out
+    assert (
+        "Runtime keys: f=freeze, r=reset peaks, s=snapshot, "
+        "p=export profile, q=quit" in captured.out
+    )
 
 
 def test_create_app_returns_named_application() -> None:
@@ -149,6 +152,15 @@ def test_build_parser_accepts_history_rows_option() -> None:
     assert args.history_rows == 8
 
 
+def test_build_parser_accepts_graph_height_option() -> None:
+    """Parser should accept and parse explicit graph height."""
+    parser = build_parser()
+
+    args = parser.parse_args(["--graph-height", "12"])
+
+    assert args.graph_height == 12
+
+
 def test_build_parser_accepts_history_gradient_option() -> None:
     """Parser should accept and parse custom history gradient text."""
     parser = build_parser()
@@ -156,6 +168,55 @@ def test_build_parser_accepts_history_gradient_option() -> None:
     args = parser.parse_args(["--history-gradient", ".:=#"])
 
     assert args.history_gradient == ".:=#"
+
+
+def test_build_parser_accepts_axis_frequencies_option() -> None:
+    """Parser should accept and normalize custom axis frequency labels."""
+    parser = build_parser()
+
+    args = parser.parse_args(["--axis-frequencies", "50, 100,1000,5000"])
+
+    assert args.axis_frequencies == (50.0, 100.0, 1000.0, 5000.0)
+
+
+def test_build_parser_accepts_block_size_option() -> None:
+    """Parser should accept and parse an explicit audio block size."""
+    parser = build_parser()
+
+    args = parser.parse_args(["--block-size", "2048"])
+
+    assert args.block_size == 2048
+
+
+def test_build_parser_accepts_snapshot_options() -> None:
+    """Parser should accept snapshot file, format, and directory options."""
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "--snapshot-file",
+            "snapshots/frame.txt",
+            "--snapshot-format",
+            "ansi",
+            "--snapshot-dir",
+            "snapshots",
+        ]
+    )
+
+    assert args.snapshot_file == "snapshots/frame.txt"
+    assert args.snapshot_format == "ansi"
+    assert args.snapshot_dir == "snapshots"
+
+
+def test_build_parser_accepts_peak_db_label_options() -> None:
+    """Parser should support enabling and disabling peak dB labels."""
+    parser = build_parser()
+
+    enabled_args = parser.parse_args(["--peak-db-labels"])
+    disabled_args = parser.parse_args(["--no-peak-db-labels"])
+
+    assert enabled_args.peak_db_labels is True
+    assert disabled_args.peak_db_labels is False
 
 
 def test_build_parser_accepts_history_color_option() -> None:
@@ -177,3 +238,27 @@ def test_main_rejects_negative_peak_hold_frames(
 
     assert exit_code == 1
     assert "Peak hold frames must be zero or greater." in captured.err
+
+
+def test_main_rejects_non_positive_graph_height(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """CLI should reject graph heights less than one row."""
+    exit_code = main(["--graph-height", "0"])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert "Graph height must be greater than zero." in captured.err
+
+
+def test_main_rejects_non_positive_block_size(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """CLI should reject non-positive explicit block sizes."""
+    exit_code = main(["--block-size", "0"])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert "Block size must be greater than zero." in captured.err

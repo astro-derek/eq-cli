@@ -220,6 +220,252 @@ def test_main_applies_peak_hold_frames_from_profile(
     assert exit_code == 0
     assert captured["peak_hold_frames"] == 12
     assert captured["volume_mode"] == "absolute"
+    assert captured["history_rows"] == 0
+    assert captured["db_min"] == -76.0
+    assert captured["db_max"] == 0.0
+    assert captured["graph_height"] == 24
+    assert captured["graph_width"] == 140
+    assert captured["peak_char"] == "_"
+    assert captured["snapshot_format"] == "ansi"
+    assert captured["snapshot_dir"] == "snapshots"
+
+
+def test_main_applies_peak_db_labels_from_profile(
+    fake_provider: FakeAudioInputDeviceProvider,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Profile peak dB label defaults should reach the render loop."""
+    captured: dict[str, object] = {}
+    profile_file = tmp_path / "profiles.json"
+    profile_file.write_text(
+        json.dumps(
+            {
+                "profiles": {
+                    "analysis": {
+                        "peak_db_labels": True,
+                        "snapshot_format": "ansi",
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def _fake_run_equalizer(device: AudioInputDevice, **kwargs: object) -> int:
+        captured["device"] = device
+        captured.update(kwargs)
+        return 0
+
+    monkeypatch.setattr("eq_cli.cli.run_equalizer", _fake_run_equalizer)
+
+    exit_code = main(
+        [
+            "--device",
+            "mic-1",
+            "--profile-file",
+            str(profile_file),
+            "--profile",
+            "analysis",
+        ],
+        device_provider=fake_provider,
+    )
+
+    assert exit_code == 0
+    assert captured["peak_db_labels"] is True
+    assert captured["snapshot_format"] == "ansi"
+
+
+def test_main_passes_exportable_profile_to_loop(
+    fake_provider: FakeAudioInputDeviceProvider,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CLI should pass the effective exportable profile configuration to the loop."""
+    captured: dict[str, object] = {}
+
+    def _fake_run_equalizer(device: AudioInputDevice, **kwargs: object) -> int:
+        captured["device"] = device
+        captured.update(kwargs)
+        return 0
+
+    monkeypatch.setattr("eq_cli.cli.run_equalizer", _fake_run_equalizer)
+
+    exit_code = main(
+        [
+            "--device",
+            "mic-1",
+            "--profile",
+            "studio",
+            "--gain",
+            "3.5",
+            "--refresh-rate",
+            "45",
+            "--block-size",
+            "2048",
+            "--axis-frequencies",
+            "50,100,1000,5000",
+            "--peak-db-labels",
+            "--color-bar",
+            "bright_green",
+            "--snapshot-file",
+            "captures/current.txt",
+        ],
+        device_provider=fake_provider,
+    )
+
+    export_profile = captured["export_profile"]
+
+    assert exit_code == 0
+    assert isinstance(export_profile, dict)
+    assert export_profile["gain"] == 3.5
+    assert export_profile["graph_height"] == 24
+    assert export_profile["refresh_rate"] == 45.0
+    assert export_profile["block_size"] == 2048
+    assert export_profile["axis_frequencies"] == (50.0, 100.0, 1000.0, 5000.0)
+    assert export_profile["peak_db_labels"] is True
+    assert export_profile["snapshot_format"] == "ansi"
+    assert export_profile["snapshot_file"] == "captures/current.txt"
+    assert export_profile["colors"]["bar"] == "bright_green"
+
+
+def test_main_applies_extended_runtime_settings_from_profile(
+    fake_provider: FakeAudioInputDeviceProvider,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Profiles should be able to set runtime tuning values beyond render style."""
+    captured: dict[str, object] = {}
+    profile_file = tmp_path / "profiles.json"
+    profile_file.write_text(
+        json.dumps(
+            {
+                "profiles": {
+                    "analysis": {
+                        "gain": 4.5,
+                        "refresh_rate": 50.0,
+                        "block_size": 1024,
+                        "axis_frequencies": [50.0, 100.0, 1000.0],
+                        "snapshot_file": "captures/startup.txt",
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def _fake_run_equalizer(device: AudioInputDevice, **kwargs: object) -> int:
+        captured["device"] = device
+        captured.update(kwargs)
+        return 0
+
+    monkeypatch.setattr("eq_cli.cli.run_equalizer", _fake_run_equalizer)
+
+    exit_code = main(
+        [
+            "--device",
+            "mic-1",
+            "--profile-file",
+            str(profile_file),
+            "--profile",
+            "analysis",
+        ],
+        device_provider=fake_provider,
+    )
+
+    assert exit_code == 0
+    assert captured["gain_db"] == 4.5
+    assert captured["refresh_rate"] == 50.0
+    assert captured["block_size"] == 1024
+    assert captured["axis_frequencies"] == (50.0, 100.0, 1000.0)
+    assert captured["snapshot_file"] == "captures/startup.txt"
+
+
+def test_main_passes_explicit_graph_height_to_loop(
+    fake_provider: FakeAudioInputDeviceProvider,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CLI should forward explicit graph height to the render loop."""
+    captured: dict[str, object] = {}
+
+    def _fake_run_equalizer(device: AudioInputDevice, **kwargs: object) -> int:
+        captured["device"] = device
+        captured.update(kwargs)
+        return 0
+
+    monkeypatch.setattr("eq_cli.cli.run_equalizer", _fake_run_equalizer)
+
+    exit_code = main(
+        ["--device", "mic-1", "--graph-height", "14"],
+        device_provider=fake_provider,
+    )
+
+    assert exit_code == 0
+    assert captured["graph_height"] == 14
+
+
+def test_main_passes_axis_frequencies_and_block_size_to_loop(
+    fake_provider: FakeAudioInputDeviceProvider,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CLI should forward custom axis labels and block size to the loop."""
+    captured: dict[str, object] = {}
+
+    def _fake_run_equalizer(device: AudioInputDevice, **kwargs: object) -> int:
+        captured["device"] = device
+        captured.update(kwargs)
+        return 0
+
+    monkeypatch.setattr("eq_cli.cli.run_equalizer", _fake_run_equalizer)
+
+    exit_code = main(
+        [
+            "--device",
+            "mic-1",
+            "--axis-frequencies",
+            "50,100,1000,5000",
+            "--block-size",
+            "2048",
+        ],
+        device_provider=fake_provider,
+    )
+
+    assert exit_code == 0
+    assert captured["axis_frequencies"] == (50.0, 100.0, 1000.0, 5000.0)
+    assert captured["block_size"] == 2048
+
+
+def test_main_passes_snapshot_settings_to_loop(
+    fake_provider: FakeAudioInputDeviceProvider,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CLI should forward snapshot configuration to the render loop."""
+    captured: dict[str, object] = {}
+
+    def _fake_run_equalizer(device: AudioInputDevice, **kwargs: object) -> int:
+        captured["device"] = device
+        captured.update(kwargs)
+        return 0
+
+    monkeypatch.setattr("eq_cli.cli.run_equalizer", _fake_run_equalizer)
+
+    exit_code = main(
+        [
+            "--device",
+            "mic-1",
+            "--snapshot-file",
+            "snapshots/frame.txt",
+            "--snapshot-format",
+            "ansi",
+            "--snapshot-dir",
+            "snapshots",
+        ],
+        device_provider=fake_provider,
+    )
+
+    assert exit_code == 0
+    assert captured["snapshot_file"] == "snapshots/frame.txt"
+    assert captured["snapshot_format"] == "ansi"
+    assert captured["snapshot_dir"] == "snapshots"
 
 
 def test_main_mode_studio_applies_preset_defaults(

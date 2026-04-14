@@ -14,6 +14,7 @@ _BUILTIN_PROFILES: dict[str, "RenderProfile"] = {
         "db_min": -80.0,
         "db_max": 6.0,
         "db_interval": 10.0,
+        "graph_height": 10,
         "graph_width": 120,
         "band_gap": 0,
         "bar_char": "#",
@@ -28,20 +29,23 @@ _BUILTIN_PROFILES: dict[str, "RenderProfile"] = {
         "volume_mode": "absolute",
         "channel_mode": "sum",
         "peak_hold_frames": 12,
-        "history_rows": 6,
+        "history_rows": 0,
         "history_gradient": " .:-=+*#%@",
-        "db_min": -70.0,
-        "db_max": 6.0,
+        "db_min": -76.0,
+        "db_max": 0.0,
         "db_interval": 6.0,
-        "graph_width": 120,
+        "graph_height": 24,
+        "graph_width": 140,
         "band_gap": 1,
         "bar_char": "=",
-        "peak_char": "^",
+        "peak_char": "_",
         "axis_labels": True,
         "show_shortcuts": True,
         "title": True,
         "title_text": "eq-cli studio",
         "db_marker_style": "minimal",
+        "snapshot_format": "ansi",
+        "snapshot_dir": "snapshots",
         "colors": {
             "axis": "bright_black",
             "label": "bright_white",
@@ -58,6 +62,7 @@ _BUILTIN_PROFILES: dict[str, "RenderProfile"] = {
         "db_min": -80.0,
         "db_max": 6.0,
         "db_interval": 10.0,
+        "graph_height": 10,
         "graph_width": 120,
         "band_gap": 1,
         "bar_char": "#",
@@ -84,6 +89,7 @@ _BUILTIN_PROFILES: dict[str, "RenderProfile"] = {
         "db_min": -80.0,
         "db_max": 0.0,
         "db_interval": 20.0,
+        "graph_height": 5,
         "graph_width": 100,
         "band_gap": 0,
         "bar_char": "|",
@@ -103,6 +109,7 @@ _BUILTIN_PROFILES: dict[str, "RenderProfile"] = {
         "db_min": -80.0,
         "db_max": 6.0,
         "db_interval": 10.0,
+        "graph_height": 10,
         "graph_width": 120,
         "band_gap": 1,
         "bar_char": "#",
@@ -121,21 +128,28 @@ _BUILTIN_PROFILES: dict[str, "RenderProfile"] = {
     },
 }
 
-_PROFILE_NUMERIC_KEYS = {"db_min", "db_max", "db_interval"}
+_PROFILE_NUMERIC_KEYS = {"gain", "db_min", "db_max", "db_interval"}
 _PROFILE_INTEGER_KEYS = {
+    "block_size",
+    "graph_height",
     "graph_width",
     "band_gap",
     "peak_hold_frames",
     "history_rows",
 }
-_PROFILE_BOOLEAN_KEYS = {"axis_labels", "show_shortcuts", "title"}
+_PROFILE_BOOLEAN_KEYS = {"axis_labels", "show_shortcuts", "title", "peak_db_labels"}
 _PROFILE_STRING_KEYS = {
     "title_text",
     "db_marker_style",
     "volume_mode",
     "channel_mode",
     "history_gradient",
+    "snapshot_file",
+    "snapshot_dir",
 }
+_PROFILE_FORMAT_KEYS = {"snapshot_format"}
+_PROFILE_SEQUENCE_KEYS = {"axis_frequencies"}
+_PROFILE_SPECIAL_NUMERIC_KEYS = {"refresh_rate"}
 _PROFILE_CHAR_KEYS = {"bar_char", "peak_char"}
 _PROFILE_COLOR_KEYS = {"axis", "label", "bar", "peak", "history"}
 _PROFILE_KEYS = (
@@ -143,6 +157,9 @@ _PROFILE_KEYS = (
     | _PROFILE_INTEGER_KEYS
     | _PROFILE_BOOLEAN_KEYS
     | _PROFILE_STRING_KEYS
+    | _PROFILE_FORMAT_KEYS
+    | _PROFILE_SEQUENCE_KEYS
+    | _PROFILE_SPECIAL_NUMERIC_KEYS
     | _PROFILE_CHAR_KEYS
     | {"colors"}
 )
@@ -180,11 +197,16 @@ class ThemeColors(TypedDict, total=False):
 class RenderProfile(TypedDict, total=False):
     """Optional profile settings loaded from a profile file."""
 
+    gain: float
     db_min: float
     db_max: float
     db_interval: float
+    refresh_rate: float
+    block_size: int
+    graph_height: int
     graph_width: int
     band_gap: int
+    axis_frequencies: tuple[float, ...]
     bar_char: str
     peak_char: str
     peak_hold_frames: int
@@ -192,11 +214,15 @@ class RenderProfile(TypedDict, total=False):
     axis_labels: bool
     show_shortcuts: bool
     title: bool
+    peak_db_labels: bool
     title_text: str
     volume_mode: str
     channel_mode: str
     history_gradient: str
     db_marker_style: str
+    snapshot_file: str
+    snapshot_format: str
+    snapshot_dir: str
     colors: ThemeColors
 
 
@@ -260,6 +286,27 @@ def _validate_colors(value: object, label: str) -> ThemeColors:
     return cast(ThemeColors, validated)
 
 
+def _validate_axis_frequencies(
+    value: object,
+    label: str,
+) -> tuple[float, ...]:
+    """Validate an axis frequency sequence loaded from a profile."""
+    if not isinstance(value, list | tuple):
+        raise ValueError(f"{label} must be an array of numbers.")
+
+    frequencies: list[float] = []
+    for index, item in enumerate(value):
+        frequency = _validate_number(item, f"{label}[{index}]")
+        if frequency <= 0:
+            raise ValueError(f"{label}[{index}] must be greater than zero.")
+        frequencies.append(frequency)
+
+    if not frequencies:
+        raise ValueError(f"{label} must contain at least one value.")
+
+    return tuple(dict.fromkeys(frequencies))
+
+
 def _validate_profile(profile_name: str, profile: object, source: str) -> RenderProfile:
     """Validate one profile object and return a normalized typed mapping."""
     if not isinstance(profile, dict):
@@ -274,13 +321,24 @@ def _validate_profile(profile_name: str, profile: object, source: str) -> Render
             validated[key] = _validate_number(value, field_label)
         elif key in _PROFILE_INTEGER_KEYS:
             integer_value = _validate_int(value, field_label)
+            if key == "graph_height" and integer_value < 0:
+                raise ValueError(f"{field_label} must be zero or greater.")
+            if key == "block_size" and integer_value <= 0:
+                raise ValueError(f"{field_label} must be greater than zero.")
             if key in {"peak_hold_frames", "history_rows"} and integer_value < 0:
                 raise ValueError(f"{field_label} must be zero or greater.")
             validated[key] = integer_value
         elif key in _PROFILE_BOOLEAN_KEYS:
             validated[key] = _validate_bool(value, field_label)
+        elif key == "axis_frequencies":
+            validated[key] = _validate_axis_frequencies(value, field_label)
         elif key in _PROFILE_CHAR_KEYS:
             validated[key] = _validate_char(value, field_label)
+        elif key == "snapshot_format":
+            snapshot_format = _validate_string(value, field_label)
+            if snapshot_format not in {"txt", "ansi"}:
+                raise ValueError(f"{field_label} must be one of: txt, ansi.")
+            validated[key] = snapshot_format
         elif key == "db_marker_style":
             marker_style = _validate_string(value, field_label)
             if marker_style not in {"all", "spaced", "minimal"}:
@@ -295,6 +353,11 @@ def _validate_profile(profile_name: str, profile: object, source: str) -> Render
                     f"{field_label} must be one of: relative, absolute."
                 )
             validated[key] = volume_mode
+        elif key == "refresh_rate":
+            refresh_rate = _validate_number(value, field_label)
+            if refresh_rate <= 0:
+                raise ValueError(f"{field_label} must be greater than zero.")
+            validated[key] = refresh_rate
         elif key == "channel_mode":
             channel_mode = _validate_string(value, field_label)
             if channel_mode not in {"mono", "left", "right", "sum", "mid", "side"}:
@@ -302,7 +365,7 @@ def _validate_profile(profile_name: str, profile: object, source: str) -> Render
                     f"{field_label} must be one of: mono, left, right, sum, mid, side."
                 )
             validated[key] = channel_mode
-        elif key == "title_text":
+        elif key in {"title_text", "snapshot_file", "snapshot_dir"}:
             validated[key] = _validate_string(value, field_label)
         elif key == "history_gradient":
             history_gradient = _validate_string(value, field_label)

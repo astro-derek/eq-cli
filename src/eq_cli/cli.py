@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from collections.abc import Sequence
 from textwrap import dedent
@@ -9,7 +10,13 @@ from typing import Callable, cast
 from eq_cli.app import create_app
 from eq_cli.audio import AudioInputDevice, AudioInputDeviceProvider, SoundDeviceProvider
 from eq_cli.loop import run_equalizer
-from eq_cli.profile import list_builtin_profiles, load_profile, resolve_color_code
+from eq_cli.profile import (
+    RenderProfile,
+    ThemeColors,
+    list_builtin_profiles,
+    load_profile,
+    resolve_color_code,
+)
 
 _MODE_PRESETS: dict[str, dict[str, object]] = {
     "studio": {
@@ -42,7 +49,7 @@ _HELP_EPILOG = dedent(
       - Discover presets: eq-cli --list-profiles
       - Keep output compact: use --no-shortcuts and --history-rows 0
       - Tune readability: try --axis-labels with --db-marker-style minimal
-      - Runtime keys: f=freeze, r=reset peaks, q=quit
+    - Runtime keys: f=freeze, r=reset peaks, s=snapshot, p=export profile, q=quit
     """
 )
 
@@ -105,6 +112,31 @@ def _list_devices(devices: list[AudioInputDevice]) -> None:
 def _has_flag(arguments: Sequence[str], flags: tuple[str, ...]) -> bool:
     """Return whether any of the provided flags were passed by the user."""
     return any(flag in arguments for flag in flags)
+
+
+def _parse_axis_frequencies(value: str) -> tuple[float, ...]:
+    """Parse a comma/whitespace separated list of positive frequencies."""
+    parts = [part for part in re.split(r"[\s,]+", value.strip()) if part]
+    if not parts:
+        raise argparse.ArgumentTypeError(
+            "Axis frequencies must contain at least one value."
+        )
+
+    frequencies: list[float] = []
+    for part in parts:
+        try:
+            frequency = float(part)
+        except ValueError as exc:
+            raise argparse.ArgumentTypeError(
+                f"Invalid axis frequency: {part}"
+            ) from exc
+        if frequency <= 0:
+            raise argparse.ArgumentTypeError(
+                "Axis frequencies must be greater than zero."
+            )
+        frequencies.append(frequency)
+
+    return tuple(dict.fromkeys(frequencies))
 
 
 def _apply_mode_defaults(
@@ -224,12 +256,30 @@ def build_parser() -> argparse.ArgumentParser:
         help="Maximum redraw rate in frames per second (default: 30).",
     )
     parser.add_argument(
+        "--block-size",
+        type=int,
+        dest="block_size",
+        metavar="FRAMES",
+        help="Audio callback block size in frames. Defaults to auto-tuned sizing.",
+    )
+    parser.add_argument(
         "--graph-width",
         type=int,
         default=120,
         dest="graph_width",
         metavar="CHARS",
         help="Width of the graph area in characters (default: 120).",
+    )
+    parser.add_argument(
+        "--graph-height",
+        type=int,
+        default=0,
+        dest="graph_height",
+        metavar="ROWS",
+        help=(
+            "Number of graph rows to render. Uses the dB scale by default when "
+            "set to 0."
+        ),
     )
     parser.add_argument(
         "--band-gap",
@@ -241,6 +291,48 @@ def build_parser() -> argparse.ArgumentParser:
             "Separator width inserted between labeled frequency regions "
             "(default: 0)."
         ),
+    )
+    parser.add_argument(
+        "--axis-frequencies",
+        type=_parse_axis_frequencies,
+        dest="axis_frequencies",
+        metavar="LIST",
+        help=(
+            "Comma- or space-separated frequency labels for the horizontal axis "
+            "(for example: 50,100,1000,5000)."
+        ),
+    )
+    parser.add_argument(
+        "--snapshot-file",
+        dest="snapshot_file",
+        metavar="PATH",
+        help="Save one chart snapshot to PATH and exit after the first usable frame.",
+    )
+    parser.add_argument(
+        "--snapshot-format",
+        choices=["txt", "ansi"],
+        default="txt",
+        dest="snapshot_format",
+        help="Snapshot output format: plain text or ANSI-colored text.",
+    )
+    parser.add_argument(
+        "--snapshot-dir",
+        dest="snapshot_dir",
+        metavar="DIR",
+        help="Directory for runtime hotkey snapshots when pressing 's'.",
+    )
+    parser.add_argument(
+        "--peak-db-labels",
+        action="store_true",
+        default=False,
+        dest="peak_db_labels",
+        help="Overlay numeric dB values for visible peak markers when space allows.",
+    )
+    parser.add_argument(
+        "--no-peak-db-labels",
+        action="store_false",
+        dest="peak_db_labels",
+        help="Disable numeric dB labels for peak markers.",
     )
     parser.add_argument(
         "--bar-char",
@@ -383,6 +475,12 @@ def _merge_profile_settings(
 
     if args.peak_hold_frames < 0:
         raise ValueError("Peak hold frames must be zero or greater.")
+    if args.graph_height < 0:
+        raise ValueError("Graph height must be zero or greater.")
+    if args.graph_height == 0 and _has_flag(provided_args, ("--graph-height",)):
+        raise ValueError("Graph height must be greater than zero.")
+    if args.block_size is not None and args.block_size <= 0:
+        raise ValueError("Block size must be greater than zero.")
     if args.history_rows < 0:
         raise ValueError("History rows must be zero or greater.")
     if args.history_gradient == "":
@@ -404,10 +502,16 @@ def _merge_profile_settings(
         args.db_max = float(profile["db_max"])
     if not _has_flag(provided_args, ("--db-interval",)) and "db_interval" in profile:
         args.db_interval = float(profile["db_interval"])
+    if not _has_flag(provided_args, ("--gain",)) and "gain" in profile:
+        args.gain = float(profile["gain"])
     if not _has_flag(provided_args, ("--volume-mode",)) and "volume_mode" in profile:
         args.volume_mode = str(profile["volume_mode"])
     if not _has_flag(provided_args, ("--channel-mode",)) and "channel_mode" in profile:
         args.channel_mode = str(profile["channel_mode"])
+    if not _has_flag(provided_args, ("--refresh-rate",)) and "refresh_rate" in profile:
+        args.refresh_rate = float(profile["refresh_rate"])
+    if not _has_flag(provided_args, ("--block-size",)) and "block_size" in profile:
+        args.block_size = int(profile["block_size"])
     if (
         not _has_flag(provided_args, ("--peak-hold-frames",))
         and "peak_hold_frames" in profile
@@ -422,14 +526,38 @@ def _merge_profile_settings(
         args.history_gradient = str(profile["history_gradient"])
     if not _has_flag(provided_args, ("--graph-width",)) and "graph_width" in profile:
         args.graph_width = int(profile["graph_width"])
+    if not _has_flag(provided_args, ("--graph-height",)) and "graph_height" in profile:
+        args.graph_height = int(profile["graph_height"])
     if not _has_flag(provided_args, ("--band-gap",)) and "band_gap" in profile:
         args.band_gap = int(profile["band_gap"])
+    if (
+        not _has_flag(provided_args, ("--axis-frequencies",))
+        and "axis_frequencies" in profile
+    ):
+        args.axis_frequencies = tuple(profile["axis_frequencies"])
+    if (
+        not _has_flag(provided_args, ("--snapshot-format",))
+        and "snapshot_format" in profile
+    ):
+        args.snapshot_format = str(profile["snapshot_format"])
+    if (
+        not _has_flag(provided_args, ("--snapshot-file",))
+        and "snapshot_file" in profile
+    ):
+        args.snapshot_file = str(profile["snapshot_file"])
+    if not _has_flag(provided_args, ("--snapshot-dir",)) and "snapshot_dir" in profile:
+        args.snapshot_dir = str(profile["snapshot_dir"])
     if not _has_flag(provided_args, ("--bar-char",)) and "bar_char" in profile:
         args.bar_char = str(profile["bar_char"])
     if not _has_flag(provided_args, ("--peak-char",)) and "peak_char" in profile:
         args.peak_char = str(profile["peak_char"])
     if not _has_flag(provided_args, ("--axis-labels",)) and "axis_labels" in profile:
         args.axis_labels = bool(profile["axis_labels"])
+    if (
+        not _has_flag(provided_args, ("--peak-db-labels", "--no-peak-db-labels"))
+        and "peak_db_labels" in profile
+    ):
+        args.peak_db_labels = bool(profile["peak_db_labels"])
     if (
         not _has_flag(provided_args, ("--show-shortcuts", "--no-shortcuts"))
         and "show_shortcuts" in profile
@@ -457,6 +585,58 @@ def _merge_profile_settings(
         args.color_history = str(colors["history"])
 
     return args
+
+
+def _build_export_profile(args: argparse.Namespace, title_text: str) -> RenderProfile:
+    """Return the effective profile-compatible settings for runtime export."""
+    colors: ThemeColors = {}
+    if args.color_axis is not None:
+        colors["axis"] = args.color_axis
+    if args.color_label is not None:
+        colors["label"] = args.color_label
+    if args.color_bar is not None:
+        colors["bar"] = args.color_bar
+    if args.color_peak is not None:
+        colors["peak"] = args.color_peak
+    if args.color_history is not None:
+        colors["history"] = args.color_history
+
+    profile: RenderProfile = {
+        "gain": args.gain,
+        "db_min": args.db_min,
+        "db_max": args.db_max,
+        "db_interval": args.db_interval,
+        "refresh_rate": args.refresh_rate,
+        "graph_height": args.graph_height,
+        "graph_width": args.graph_width,
+        "band_gap": args.band_gap,
+        "bar_char": args.bar_char,
+        "peak_char": args.peak_char,
+        "peak_db_labels": args.peak_db_labels,
+        "peak_hold_frames": args.peak_hold_frames,
+        "block_size": args.block_size,
+        "history_rows": args.history_rows,
+        "axis_labels": args.axis_labels,
+        "show_shortcuts": args.show_shortcuts,
+        "title": args.title,
+        "title_text": title_text,
+        "volume_mode": args.volume_mode,
+        "channel_mode": args.channel_mode,
+        "history_gradient": args.history_gradient,
+        "db_marker_style": args.db_marker_style,
+        "snapshot_format": args.snapshot_format,
+    }
+    if args.block_size is not None:
+        profile["block_size"] = args.block_size
+    if args.axis_frequencies is not None:
+        profile["axis_frequencies"] = args.axis_frequencies
+    if args.snapshot_file is not None:
+        profile["snapshot_file"] = args.snapshot_file
+    if args.snapshot_dir is not None:
+        profile["snapshot_dir"] = args.snapshot_dir
+    if colors:
+        profile["colors"] = colors
+    return profile
 
 
 def main(
@@ -528,8 +708,16 @@ def main(
         f"channel_mode={args.channel_mode}, "
         f"peak_hold_frames={args.peak_hold_frames}, "
         f"history_rows={args.history_rows}, "
+        f"graph_height={args.graph_height or 'auto'}, "
+        f"block_size={args.block_size or 'auto'}, "
+        f"snapshot_format={args.snapshot_format}, "
+        f"peak_db_labels={'on' if args.peak_db_labels else 'off'}, "
         f"history_gradient={args.history_gradient}, "
         f"refresh_rate={args.refresh_rate}"
+    )
+    export_profile = _build_export_profile(
+        args,
+        args.title_text or f"{app.name} v{app.version}",
     )
     _loop = loop_func if loop_func is not None else (
         lambda dev: run_equalizer(
@@ -538,13 +726,17 @@ def main(
             db_min=args.db_min,
             db_max=args.db_max,
             db_interval=args.db_interval,
+            graph_height=args.graph_height,
             volume_mode=args.volume_mode,
             channel_mode=args.channel_mode,
             refresh_rate=args.refresh_rate,
+            block_size=args.block_size,
             graph_width=args.graph_width,
             band_gap=args.band_gap,
+            axis_frequencies=args.axis_frequencies,
             bar_char=args.bar_char,
             peak_char=args.peak_char,
+            peak_db_labels=args.peak_db_labels,
             peak_hold_frames=args.peak_hold_frames,
             history_rows=args.history_rows,
             history_gradient=args.history_gradient,
@@ -558,6 +750,10 @@ def main(
             history_color_code=resolve_color_code(args.color_history),
             axis_color_code=resolve_color_code(args.color_axis),
             label_color_code=resolve_color_code(args.color_label),
+            snapshot_file=args.snapshot_file,
+            snapshot_format=args.snapshot_format,
+            snapshot_dir=args.snapshot_dir,
+            export_profile=export_profile,
         )
     )
     return _loop(selected_device)

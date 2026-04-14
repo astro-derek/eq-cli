@@ -20,9 +20,9 @@ def test_render_frame_includes_frequency_and_db_axes() -> None:
 
     output = renderer.render(build_render_frame())
 
-    assert "6 dB |" in output
-    assert "0 dB |" in output
-    assert "-80 dB |" in output
+    assert "6 dB +" in output
+    assert "0 dB +" in output
+    assert "-80 dB +" in output
     assert "20" in output
     assert "100" in output
     assert "1k" in output
@@ -42,10 +42,10 @@ def test_render_frame_supports_configurable_db_scale() -> None:
 
     output = renderer.render(build_render_frame())
 
-    assert "12 dB |" in output
-    assert " 6 dB |" in output
-    assert "-60 dB |" in output
-    assert "-80 dB |" not in output
+    assert "12 dB +" in output
+    assert " 6 dB +" in output
+    assert "-60 dB +" in output
+    assert "-80 dB +" not in output
 
 
 def test_render_frame_uses_ansi_color_when_enabled() -> None:
@@ -94,6 +94,37 @@ def test_render_frame_uses_in_place_update_after_first_frame() -> None:
     assert second_output.startswith("\x1b[") and "A" in second_output[:10]
 
 
+def test_render_snapshot_omits_reposition_prefix_after_live_render() -> None:
+    """Snapshot output should not include redraw control sequences."""
+    renderer = TerminalRenderer(color_enabled=False)
+    frame = build_render_frame()
+
+    renderer.render(frame)
+    snapshot = renderer.render_snapshot(frame, snapshot_format="txt")
+
+    assert not snapshot.startswith("\x1b[")
+
+
+def test_render_snapshot_txt_strips_ansi_codes() -> None:
+    """Plain-text snapshots should strip ANSI color codes."""
+    renderer = TerminalRenderer(color_enabled=True)
+
+    snapshot = renderer.render_snapshot(build_render_frame(), snapshot_format="txt")
+
+    assert "\x1b[" not in snapshot
+
+
+def test_render_snapshot_ansi_preserves_color_codes() -> None:
+    """ANSI snapshots should preserve bar colors without redraw prefixes."""
+    renderer = TerminalRenderer(color_enabled=True)
+
+    renderer.render(build_render_frame())
+    snapshot = renderer.render_snapshot(build_render_frame(), snapshot_format="ansi")
+
+    assert "\x1b[36m" in snapshot
+    assert not snapshot.startswith("\x1b[")
+
+
 def test_render_frame_distributes_frequency_markers_across_axis() -> None:
     """The axis should include aligned label rows across the graph width."""
     renderer = TerminalRenderer(color_enabled=False, show_axis_labels=True)
@@ -124,15 +155,52 @@ def test_render_frame_uses_configured_graph_width() -> None:
 
     output_lines = renderer.render(build_render_frame()).splitlines()
 
-    zero_db_line = next(line for line in output_lines if line.startswith("   0 dB |"))
+    zero_db_line = next(line for line in output_lines if line.startswith("   0 dB +"))
     axis_line = next(line for line in output_lines if line.startswith("        +-"))
 
-    assert len(zero_db_line.split("|", maxsplit=1)[1]) == 120
+    assert len(zero_db_line.split("+", maxsplit=1)[1]) == 120
     assert len(axis_line) == len("         ") + 120
 
 
+def test_render_frame_supports_configurable_graph_height() -> None:
+    """Renderer should use the caller-provided row count for graph height."""
+    renderer = TerminalRenderer(
+        color_enabled=False,
+        graph_height=5,
+        show_axis_labels=True,
+        show_title=False,
+        show_shortcuts=False,
+    )
+
+    output_lines = renderer.render(build_render_frame()).splitlines()
+    axis_line = next(line for line in output_lines if line.startswith("        +-"))
+
+    assert output_lines.index(axis_line) == 5
+    assert output_lines[0].startswith("   6 dB +")
+    assert output_lines[4].startswith(" -80 dB +")
+
+
+def test_render_frame_rounds_db_axis_labels_to_whole_numbers() -> None:
+    """Displayed dB axis labels should not include decimal places."""
+    renderer = TerminalRenderer(
+        color_enabled=False,
+        db_min=-76.0,
+        db_max=0.0,
+        graph_height=16,
+        show_axis_labels=True,
+        show_title=False,
+        show_shortcuts=False,
+    )
+
+    output = renderer.render(build_render_frame())
+
+    assert "." not in "\n".join(
+        line for line in output.splitlines() if " dB +" in line
+    )
+
+
 def test_render_frame_supports_configurable_band_gap() -> None:
-    """Configured gaps should add separators between labeled regions."""
+    """Configured gaps should propagate vertically through the chart."""
     frequencies = tuple(build_log_frequency_centers(20.0, 20_000.0, 32))
     frame = RenderFrame(
         frequencies_hz=frequencies,
@@ -148,14 +216,140 @@ def test_render_frame_supports_configurable_band_gap() -> None:
     )
 
     output_lines = renderer.render(frame).splitlines()
-    zero_db_line = next(line for line in output_lines if line.startswith("   0 dB |"))
+    zero_db_line = next(line for line in output_lines if line.startswith("   0 dB +"))
     axis_line = next(line for line in output_lines if line.startswith("        +-"))
-    bar_region = zero_db_line.split("|", maxsplit=1)[1]
+    bar_region = zero_db_line.split("+", maxsplit=1)[1]
+    axis_region = axis_line[9:]
+    bar_spaces = {
+        index for index, character in enumerate(bar_region) if character == " "
+    }
+    axis_spaces = {
+        index for index, character in enumerate(axis_region) if character == " "
+    }
 
     assert len(bar_region) == 32
-    assert " " in bar_region
-    assert " =" in bar_region or "= " in bar_region
+    assert bar_spaces == axis_spaces
+    assert bar_spaces
+    assert max(bar_spaces) >= 29
+    assert bar_region[0] == "="
     assert len(axis_line) == len("         ") + 32
+
+
+def test_render_frame_supports_custom_axis_frequencies() -> None:
+    """Renderer should use caller-provided axis label frequencies."""
+    renderer = TerminalRenderer(
+        color_enabled=False,
+        show_axis_labels=True,
+        axis_frequencies=(50.0, 200.0, 1000.0, 5000.0),
+    )
+
+    output = renderer.render(build_render_frame())
+
+    assert "50" in output
+    assert "200" in output
+    assert "1k" in output
+    assert "5kHz" in output
+    assert "20kHz" not in output
+
+
+def test_render_frame_adds_horizontal_axis_notches_for_frequency_labels() -> None:
+    """Horizontal axis should place visible notches under labeled frequencies."""
+    renderer = TerminalRenderer(
+        color_enabled=False,
+        graph_width=32,
+        show_axis_labels=True,
+        axis_frequencies=(20.0, 1000.0, 20000.0),
+        show_title=False,
+        show_shortcuts=False,
+    )
+
+    output_lines = renderer.render(build_render_frame()).splitlines()
+    axis_line = next(line for line in output_lines if line.startswith("        +"))
+
+    assert axis_line.count("+") >= 3
+
+
+def test_render_frame_adds_vertical_axis_notches_for_visible_db_labels() -> None:
+    """Visible dB label rows should use a notch at the vertical axis."""
+    renderer = TerminalRenderer(
+        color_enabled=False,
+        show_axis_labels=True,
+        db_marker_style="minimal",
+        show_title=False,
+        show_shortcuts=False,
+    )
+
+    output_lines = renderer.render(build_render_frame()).splitlines()
+    labeled_rows = [line for line in output_lines if " dB +" in line]
+
+    assert labeled_rows
+
+
+def test_render_frame_can_overlay_peak_db_labels() -> None:
+    """Peak dB labels should render on the row above the associated peak."""
+    frame = RenderFrame(
+        frequencies_hz=tuple(build_log_frequency_centers(20.0, 20_000.0, 8)),
+        levels_db=(-80.0, -80.0, -80.0, -14.0, -80.0, -80.0, -80.0, -80.0),
+        peak_levels_db=(-80.0, -80.0, -80.0, -12.0, -80.0, -80.0, -80.0, -80.0),
+    )
+    renderer = TerminalRenderer(
+        color_enabled=False,
+        graph_width=48,
+        show_title=False,
+        show_shortcuts=False,
+        peak_char="^",
+        peak_db_labels=True,
+    )
+
+    output_lines = renderer.render(frame).splitlines()
+    label_index = next(
+        index for index, line in enumerate(output_lines) if "12" in line
+    )
+    peak_index = next(index for index, line in enumerate(output_lines) if "^" in line)
+
+    assert label_index < peak_index
+
+
+def test_render_frame_hides_peak_db_labels_when_band_is_too_narrow() -> None:
+    """Peak labels should be omitted when the peak band is narrower than the text."""
+    frame = RenderFrame(
+        frequencies_hz=tuple(build_log_frequency_centers(20.0, 20_000.0, 16)),
+        levels_db=(-80.0,) * 7 + (-14.0,) + (-80.0,) * 8,
+        peak_levels_db=(-80.0,) * 7 + (-12.0,) + (-80.0,) * 8,
+    )
+    renderer = TerminalRenderer(
+        color_enabled=False,
+        graph_width=16,
+        show_title=False,
+        show_shortcuts=False,
+        peak_char="^",
+        peak_db_labels=True,
+    )
+
+    output = renderer.render(frame)
+
+    assert "12" not in output
+
+
+def test_render_frame_hides_peak_db_labels_by_default() -> None:
+    """Peak dB value annotations should remain opt-in."""
+    frame = RenderFrame(
+        frequencies_hz=tuple(build_log_frequency_centers(20.0, 20_000.0, 8)),
+        levels_db=(-60.0, -24.0, -60.0, -9.0, -60.0, -18.0, -60.0, -60.0),
+        peak_levels_db=(-60.0, -18.0, -60.0, -3.0, -60.0, -12.0, -60.0, -60.0),
+    )
+    renderer = TerminalRenderer(
+        color_enabled=False,
+        graph_width=48,
+        show_title=False,
+        show_shortcuts=False,
+    )
+
+    output = renderer.render(frame)
+
+    assert "3" not in output
+    assert "12" not in output
+    assert "18" not in output
 
 
 def test_render_frame_supports_configurable_bar_and_peak_characters() -> None:
@@ -215,7 +409,7 @@ def test_render_frame_hides_axis_labels_by_default() -> None:
 
     output = renderer.render(build_render_frame())
 
-    assert " dB |" not in output
+    assert " dB +" not in output
     assert "1k" not in output
     assert "10k" not in output
 
@@ -261,7 +455,7 @@ def test_render_frame_db_marker_style_minimal_reduces_label_count() -> None:
     )
 
     output = renderer.render(build_render_frame())
-    labeled_rows = [line for line in output.splitlines() if " dB |" in line]
+    labeled_rows = [line for line in output.splitlines() if " dB +" in line]
 
     assert len(labeled_rows) <= 4
 
@@ -311,7 +505,7 @@ def test_render_frame_applies_axis_color_to_vertical_and_horizontal_axes() -> No
 
     output = renderer.render(build_render_frame())
 
-    assert "\x1b[33m|\x1b[0m" in output
+    assert "\x1b[33m+\x1b[0m" in output
     assert "\x1b[33m+" in output
 
 
