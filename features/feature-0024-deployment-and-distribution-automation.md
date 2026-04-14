@@ -40,6 +40,7 @@ Add repository automation and documentation so `eq-cli` can consistently produce
 ## Results
 - Added a CI workflow at `.github/workflows/ci.yml` that runs `pytest`, `ruff`, `mypy`, and `python -m build` on pushes and pull requests to `main`.
 - Added a tag-driven release workflow at `.github/workflows/release.yml` that builds `sdist` and `wheel` artifacts for tags matching `v*` and attaches them to a GitHub Release.
+- Updated the CI workflow to install the Ubuntu `libportaudio2` system package so `sounddevice` imports succeed during test collection on GitHub-hosted runners.
 - Updated `README.md` with the git steps required to cut a release and produce deployable artifacts.
 - Updated `ARCHITECTURE.md` to reflect the GitHub Actions-based artifact build and release flow.
 - Local validation after the workflow changes passed:
@@ -52,6 +53,7 @@ Add repository automation and documentation so `eq-cli` can consistently produce
 - The current automation publishes GitHub Release assets only; PyPI publishing is still a separate future step.
 - The workflows assume standard GitHub Actions permissions and release access on the repository.
 - This release flow builds Python package artifacts, not standalone executables.
+- CI validation depends on the runner being able to install the PortAudio runtime package on Ubuntu.
 
 ## Definition of Done
 - CI workflow is present and validates test, lint, type, and build steps.
