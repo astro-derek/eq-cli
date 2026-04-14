@@ -81,6 +81,9 @@ This checklist is the working execution tracker for the MVP. It should be update
 - [x] Feature 0023: Renderer logical row reuse
   - Status: completed
   - Goal: avoid rebuilding unchanged logical chart rows during live redraws and compare the new result against the original renderer benchmark
+- [x] Feature 0024: Deployment and distribution automation
+  - Status: completed
+  - Goal: build deployable Python artifacts from CI and Git tags, and document the release process
 
 ## Update Rules
 - Mark a feature in progress when implementation begins.

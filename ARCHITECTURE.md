@@ -13,6 +13,9 @@ for the graph.
 
 ## Deployment
 - Use python and pip to install the package.
+- Build distribution artifacts as standard Python `sdist` and `wheel` outputs.
+- Use GitHub Actions to validate builds on `main` and produce release assets
+	from version tags.
 
 ## New Features
 - Add a "theme" capability that allows the user to specify values for each
