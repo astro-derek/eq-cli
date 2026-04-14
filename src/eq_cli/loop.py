@@ -9,12 +9,12 @@ import sys
 import time
 from collections import deque
 from collections.abc import Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, Protocol, TypeAlias, cast
 
 import numpy as np
 import numpy.typing as npt
-import sounddevice as sd  # type: ignore[import-untyped]
 
 from eq_cli.audio import AudioInputDevice
 from eq_cli.peaks import PeakTracker
@@ -210,81 +210,101 @@ def extract_channel_samples(
     raise ValueError(f"Unsupported channel mode: {channel_mode}")
 
 
+@dataclass(frozen=True)
+class RenderConfig:
+    """All display and rendering parameters for the equalizer render loop.
+
+    Grouping these into a dataclass replaces the previous 33-parameter
+    ``run_equalizer`` signature, making call sites explicit and extensible.
+    """
+
+    gain_db: float = 0.0
+    db_min: float = -80.0
+    db_max: float = 6.0
+    db_interval: float = 10.0
+    graph_height: int = 0
+    volume_mode: Literal["relative", "absolute"] = "relative"
+    channel_mode: ChannelMode = "mono"
+    refresh_rate: float = DEFAULT_REFRESH_RATE
+    block_size: int | None = None
+    graph_width: int = 120
+    band_gap: int = 0
+    axis_frequencies: Sequence[float] | None = None
+    bar_char: str = "#"
+    peak_char: str = "-"
+    peak_db_labels: bool = False
+    peak_hold_frames: int = 0
+    history_rows: int = 0
+    history_gradient: str = " .:-=+*#%@"
+    show_shortcuts: bool = True
+    show_axis_labels: bool = False
+    show_title: bool = True
+    title_text: str | None = None
+    db_marker_style: Literal["all", "spaced", "minimal"] = "spaced"
+    bar_color_code: str = "\x1b[36m"
+    peak_color_code: str = "\x1b[31m"
+    history_color_code: str | None = None
+    axis_color_code: str | None = None
+    label_color_code: str | None = None
+    snapshot_file: str | None = None
+    snapshot_format: Literal["txt", "ansi"] = "txt"
+    snapshot_dir: str | None = None
+    export_profile: RenderProfile | None = field(default=None)
+
+
 def run_equalizer(
     device: AudioInputDevice,
-    gain_db: float = 0.0,
-    db_min: float = -80.0,
-    db_max: float = 6.0,
-    db_interval: float = 10.0,
-    graph_height: int = 0,
-    volume_mode: Literal["relative", "absolute"] = "relative",
-    channel_mode: ChannelMode = "mono",
-    refresh_rate: float = DEFAULT_REFRESH_RATE,
-    block_size: int | None = None,
-    graph_width: int = 120,
-    band_gap: int = 0,
-    axis_frequencies: Sequence[float] | None = None,
-    bar_char: str = "#",
-    peak_char: str = "-",
-    peak_db_labels: bool = False,
-    peak_hold_frames: int = 0,
-    history_rows: int = 0,
-    history_gradient: str = " .:-=+*#%@",
-    show_shortcuts: bool = True,
-    show_axis_labels: bool = False,
-    show_title: bool = True,
-    title_text: str | None = None,
-    db_marker_style: Literal["all", "spaced", "minimal"] = "spaced",
-    bar_color_code: str = "\x1b[36m",
-    peak_color_code: str = "\x1b[31m",
-    history_color_code: str | None = None,
-    axis_color_code: str | None = None,
-    label_color_code: str | None = None,
-    snapshot_file: str | None = None,
-    snapshot_format: Literal["txt", "ansi"] = "txt",
-    snapshot_dir: str | None = None,
-    export_profile: RenderProfile | None = None,
+    config: RenderConfig | None = None,
 ) -> int:
     """Start the real-time equalizer render loop for the selected input device.
 
     Args:
         device: The audio input device to capture from.
-        gain_db: Additive dB offset applied to all display levels.
-        db_min: Bottom of the displayed dB scale.
-        db_max: Top of the displayed dB scale.
-        db_interval: Row spacing in dB.
-        graph_height: Number of rendered graph rows. Defaults to the dB scale.
-        volume_mode: Volume mapping mode ('relative' or 'absolute').
-        channel_mode: Input channel analysis mode.
-        refresh_rate: Maximum redraw rate in frames per second.
-        block_size: Audio callback block size. Defaults to an automatic value.
-        graph_width: Width of the rendered graph area in characters.
-        band_gap: Number of spaces inserted between adjacent bands.
-        axis_frequencies: Optional custom frequency labels for the horizontal axis.
-        bar_char: Character used to draw active bars.
-        peak_char: Character used to draw peak markers.
-        peak_db_labels: Whether to overlay numeric dB labels for peak markers.
-        peak_hold_frames: Frames to hold peaks before decay.
-        history_rows: Number of history rows to render below the spectrum.
-        history_gradient: Character gradient used for history rendering.
-        show_shortcuts: Whether to render the runtime shortcuts/status line.
-        show_axis_labels: Whether to render dB/frequency axis labels.
-        show_title: Whether to render a centered title row.
-        title_text: Optional title text. Defaults to renderer fallback.
-        db_marker_style: dB marker style ('all', 'spaced', or 'minimal').
-        bar_color_code: ANSI color for active bars.
-        peak_color_code: ANSI color for peak markers.
-        history_color_code: Optional ANSI color for history rows.
-        axis_color_code: Optional ANSI color for axis baseline.
-        label_color_code: Optional ANSI color for axis labels/title.
-        snapshot_file: Optional one-shot snapshot output file path.
-        snapshot_format: Snapshot serialization format ('txt' or 'ansi').
-        snapshot_dir: Output directory for runtime hotkey snapshots.
-        export_profile: Effective profile-compatible settings for runtime export.
+        config: Rendering and display parameters. Defaults to ``RenderConfig()``
+            if not provided.
 
     Returns:
         Process exit code.
     """
+    import sounddevice as sd  # type: ignore[import-untyped]
+
+    if config is None:
+        config = RenderConfig()
+
+    # Unpack config fields into local names for readability inside the loop.
+    gain_db = config.gain_db
+    db_min = config.db_min
+    db_max = config.db_max
+    db_interval = config.db_interval
+    graph_height = config.graph_height
+    volume_mode = config.volume_mode
+    channel_mode = config.channel_mode
+    refresh_rate = config.refresh_rate
+    block_size = config.block_size
+    graph_width = config.graph_width
+    band_gap = config.band_gap
+    axis_frequencies = config.axis_frequencies
+    bar_char = config.bar_char
+    peak_char = config.peak_char
+    peak_db_labels = config.peak_db_labels
+    peak_hold_frames = config.peak_hold_frames
+    history_rows = config.history_rows
+    history_gradient = config.history_gradient
+    show_shortcuts = config.show_shortcuts
+    show_axis_labels = config.show_axis_labels
+    show_title = config.show_title
+    title_text = config.title_text
+    db_marker_style = config.db_marker_style
+    bar_color_code = config.bar_color_code
+    peak_color_code = config.peak_color_code
+    history_color_code = config.history_color_code
+    axis_color_code = config.axis_color_code
+    label_color_code = config.label_color_code
+    snapshot_file = config.snapshot_file
+    snapshot_format = config.snapshot_format
+    snapshot_dir = config.snapshot_dir
+    export_profile = config.export_profile
+
     device_index: int | None = (
         int(device.identifier) if device.identifier.isdigit() else None
     )

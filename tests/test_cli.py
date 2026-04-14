@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from eq_cli.app import create_app
@@ -262,3 +264,114 @@ def test_main_rejects_non_positive_block_size(
 
     assert exit_code == 1
     assert "Block size must be greater than zero." in captured.err
+
+
+# ---------------------------------------------------------------------------
+# C2: block_size=None must not appear in exported profile JSON
+# ---------------------------------------------------------------------------
+
+
+def test_build_export_profile_omits_block_size_when_not_set(
+    tmp_path: Path,
+) -> None:
+    """Exported profile must omit block_size when --block-size was not provided.
+
+    Exporting a profile that contains 'block_size: null' causes a ValueError
+    on re-import because the profile validator requires an integer.  This test
+    confirms the key is absent entirely when the user has not set --block-size.
+    """
+    from eq_cli.cli import _build_export_profile
+    from eq_cli.loop import _save_profile_export
+    from eq_cli.profile import load_profile
+
+    parser = build_parser()
+    args = parser.parse_args([])
+
+    profile = _build_export_profile(args, "eq-cli test")
+
+    assert "block_size" not in profile, (
+        "block_size must not be present in the profile when it was not set by the user"
+    )
+
+    # Round-trip: saving then reloading the profile must not raise.
+    saved = _save_profile_export(profile, export_dir=str(tmp_path))
+    reloaded = load_profile(str(saved), saved.stem)
+    assert "block_size" not in reloaded
+
+
+def test_build_export_profile_includes_block_size_when_set(
+    tmp_path: Path,
+) -> None:
+    """Exported profile must include block_size when --block-size was provided."""
+    from eq_cli.cli import _build_export_profile
+    from eq_cli.loop import _save_profile_export
+    from eq_cli.profile import load_profile
+
+    parser = build_parser()
+    args = parser.parse_args(["--block-size", "2048"])
+
+    profile = _build_export_profile(args, "eq-cli test")
+
+    assert profile.get("block_size") == 2048
+
+    saved = _save_profile_export(profile, export_dir=str(tmp_path))
+    reloaded = load_profile(str(saved), saved.stem)
+    assert reloaded["block_size"] == 2048
+
+
+# ---------------------------------------------------------------------------
+# C3: --db-interval 0 must be rejected with a clear error message
+# ---------------------------------------------------------------------------
+
+
+def test_main_rejects_zero_db_interval(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """CLI should reject a db_interval of zero to prevent ZeroDivisionError."""
+    exit_code = main(["--db-interval", "0"])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert "dB interval must be greater than zero." in captured.err
+
+
+def test_main_rejects_negative_db_interval(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """CLI should reject negative db_interval values."""
+    exit_code = main(["--db-interval", "-5"])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert "dB interval must be greater than zero." in captured.err
+
+
+# ---------------------------------------------------------------------------
+# M3: db_min >= db_max cross-parameter validation
+# ---------------------------------------------------------------------------
+
+
+def test_main_rejects_db_min_equal_to_db_max(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """CLI should reject configurations where db_min equals db_max."""
+    exit_code = main(["--db-min", "0", "--db-max", "0"])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert "--db-min must be less than --db-max." in captured.err
+
+
+def test_main_rejects_db_min_greater_than_db_max(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """CLI should reject configurations where db_min exceeds db_max."""
+    exit_code = main(["--db-min", "0", "--db-max", "-10"])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert "--db-min must be less than --db-max." in captured.err
