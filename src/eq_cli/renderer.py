@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import bisect
 import math
 import os
 import re
+from collections import OrderedDict
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal, Protocol, cast
@@ -12,6 +14,7 @@ CYAN = "\x1b[36m"
 RED = "\x1b[31m"
 AXIS_SEPARATOR = "|"
 AXIS_JUNCTION = "+"
+_LAYOUT_CACHE_MAX_SIZE = 8
 
 DB_MIN_DEFAULT = -80.0
 DB_MAX_DEFAULT = 6.0
@@ -210,17 +213,28 @@ class TerminalRenderer:
             db_max=db_max,
             graph_height=graph_height,
         )
-        self._db_marker_labels = _build_db_marker_labels(
-            row_thresholds=self._row_thresholds,
-            db_min=db_min,
-            db_max=db_max,
-            db_interval=db_interval,
-        )
+        # For "all" style every row gets a label; other styles use interval markers.
+        if db_marker_style == "all":
+            self._db_marker_labels = {
+                index: str(int(round(threshold)))
+                for index, threshold in enumerate(self._row_thresholds)
+            }
+        else:
+            self._db_marker_labels = _build_db_marker_labels(
+                row_thresholds=self._row_thresholds,
+                db_min=db_min,
+                db_max=db_max,
+                db_interval=db_interval,
+            )
         self._marker_rows = tuple(sorted(self._db_marker_labels))
+        # Ascending copy of row_thresholds used for O(log n) bisect lookups.
+        self._row_thresholds_asc: list[float] = list(reversed(self._row_thresholds))
         self._lines_rendered: int = 0
         self._previous_lines: tuple[str, ...] | None = None
         self._previous_frame: RenderFrame | None = None
-        self._layout_cache: dict[tuple[tuple[float, ...], int], _RenderLayout] = {}
+        self._layout_cache: OrderedDict[
+            tuple[tuple[float, ...], int], _RenderLayout
+        ] = OrderedDict()
 
     def render(self, frame: RenderFrame) -> str:
         """Render a frame with dB rows, bars, and a frequency axis."""
@@ -528,6 +542,8 @@ class TerminalRenderer:
             band_spans=band_spans,
             frequency_axis_lines=frequency_axis_lines,
         )
+        if len(self._layout_cache) >= _LAYOUT_CACHE_MAX_SIZE:
+            self._layout_cache.popitem(last=False)
         self._layout_cache[key] = layout
         return layout
 
@@ -653,8 +669,11 @@ class TerminalRenderer:
 
     def _show_db_marker(self, row_index: int) -> bool:
         """Return whether to show the row dB marker for the selected style."""
-        if self._db_marker_style in {"all", "spaced"}:
+        if self._db_marker_style == "all":
             return True
+        if self._db_marker_style == "spaced":
+            return row_index in self._db_marker_labels
+        # minimal: first, last, and midpoint of the marker rows only.
         if not self._marker_rows:
             return False
         if row_index == self._marker_rows[0] or row_index == self._marker_rows[-1]:
@@ -792,16 +811,20 @@ class TerminalRenderer:
 
     def _find_peak_row(self, peak_db: float) -> float:
         """Return the smallest row threshold at or above the peak level."""
-        target = self._row_thresholds[0]
-        for threshold in self._row_thresholds:
-            if threshold >= peak_db:
-                target = threshold
-        return target
+        asc = self._row_thresholds_asc
+        index = bisect.bisect_left(asc, peak_db)
+        if index >= len(asc):
+            index = len(asc) - 1
+        return asc[index]
 
     def _find_peak_row_index(self, peak_db: float) -> int:
         """Return the rendered row index used for a peak marker."""
-        peak_row = self._find_peak_row(peak_db)
-        return self._row_thresholds.index(peak_row)
+        asc = self._row_thresholds_asc
+        index = bisect.bisect_left(asc, peak_db)
+        if index >= len(asc):
+            index = len(asc) - 1
+        # Row index in the original descending list is the mirror position.
+        return len(self._row_thresholds) - 1 - index
 
     def _render_bar_fill(
         self,

@@ -105,27 +105,29 @@ def _save_snapshot(
     return snapshot_path
 
 
-def _next_profile_export_path(base_dir: Path) -> Path:
-    """Return the next numbered profile export path inside the target folder."""
-    index = 1
-    while True:
-        candidate = base_dir / f"eq-cli-profile-{index:03d}.json"
-        if not candidate.exists():
-            return candidate
-        index += 1
-
-
 def _save_profile_export(
     export_profile: RenderProfile,
     export_dir: str | None = None,
 ) -> Path:
-    """Serialize and write the current effective profile settings to disk."""
+    """Serialize and write the current effective profile settings to disk.
+
+    Uses exclusive file creation (``open(..., "x")``) to atomically claim a
+    numbered slot, eliminating the TOCTOU race that existed when path selection
+    and file writing were separate operations.
+    """
     base_dir = Path(export_dir) if export_dir is not None else Path.cwd()
     base_dir.mkdir(parents=True, exist_ok=True)
-    export_path = _next_profile_export_path(base_dir)
-    payload = {"profiles": {export_path.stem: export_profile}}
-    export_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-    return export_path
+    index = 1
+    while True:
+        candidate = base_dir / f"eq-cli-profile-{index:03d}.json"
+        payload = {"profiles": {candidate.stem: export_profile}}
+        content = json.dumps(payload, indent=2) + "\n"
+        try:
+            with candidate.open("x", encoding="utf-8") as fh:
+                fh.write(content)
+            return candidate
+        except FileExistsError:
+            index += 1
 
 
 def _save_posix_terminal() -> TerminalAttributes | None:
