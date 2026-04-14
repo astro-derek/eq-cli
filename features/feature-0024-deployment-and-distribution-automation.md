@@ -42,6 +42,7 @@ Add repository automation and documentation so `eq-cli` can consistently produce
 - Added a tag-driven release workflow at `.github/workflows/release.yml` that builds `sdist` and `wheel` artifacts for tags matching `v*` and attaches them to a GitHub Release.
 - Updated the CI workflow to install the Ubuntu `libportaudio2` system package so `sounddevice` imports succeed during test collection on GitHub-hosted runners.
 - Updated `README.md` with the git steps required to cut a release and produce deployable artifacts.
+- Documented the current manual release trigger sequence explicitly so the version-bump, commit, tag, and push flow can be followed consistently before future automation is added.
 - Updated `ARCHITECTURE.md` to reflect the GitHub Actions-based artifact build and release flow.
 - Local validation after the workflow changes passed:
 	- `pytest`: `140 passed`

@@ -77,6 +77,22 @@ git tag -a v0.1.1 -m "v0.1.1"
 git push origin main --tags
 ```
 
+Current manual release trigger sequence:
+
+```sh
+git checkout main
+git pull --ff-only origin main
+# edit pyproject.toml version
+git add pyproject.toml README.md
+git commit -m "release v0.1.1"
+git tag -a v0.1.1 -m "v0.1.1"
+git push origin main --tags
+```
+
+This manual sequence is the current source of truth for releases and is a good
+candidate for future automation once the release flow has been exercised a few
+times.
+
 The release workflow builds `sdist` and `wheel` artifacts and attaches them to
 the corresponding GitHub Release.
 
