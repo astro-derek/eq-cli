@@ -2,17 +2,13 @@
 
 Terminal-based real-time equalizer for live audio input.
 
-## Requirements
+## Installation
+
+### Requirements
 
 - Python 3.12 or newer
 - pip
 - A virtual environment for installation on macOS and most Linux distributions
-
-## Installation
-
-On macOS, Python installed via Homebrew is usually an externally managed
-environment. Installing with `pip install .` against the system interpreter can
-fail with `externally-managed-environment`. Use a virtual environment instead.
 
 ### Step 1. Create and activate a virtual environment
 
@@ -22,16 +18,14 @@ source .venv/bin/activate
 python -m pip install --upgrade pip
 ```
 
+On macOS, Python installed via Homebrew is usually an externally managed
+environment. Installing with `pip install .` against the system interpreter can
+fail with `externally-managed-environment`. Use a virtual environment instead.
+
 ### Step 2. Install the package
 
 ```sh
 python -m pip install .
-```
-
-For development, use an editable install instead:
-
-```sh
-python -m pip install -e .
 ```
 
 ### Step 3. Verify the install
@@ -39,62 +33,6 @@ python -m pip install -e .
 ```sh
 eq-cli --help
 ```
-
-## Release And Distribution
-
-The repository is configured to produce Python distribution artifacts from
-GitHub Actions.
-
-### CI validation
-
-Pushes and pull requests to `main` should run a CI workflow that:
-
-- runs `pytest`
-- runs `ruff`
-- runs `mypy`
-- runs `python -m build`
-
-This confirms that the repo is still capable of producing deployable Python
-artifacts.
-
-### Cut a release
-
-To create deployable artifacts for a release:
-
-1. Update the version in `pyproject.toml`.
-2. Commit the version bump on `main`.
-3. Create an annotated tag such as `v0.1.0`.
-4. Push the branch and tag.
-
-Example:
-
-```sh
-git checkout main
-git pull --ff-only origin main
-git add pyproject.toml
-git commit -m "release v0.1.1"
-git tag -a v0.1.1 -m "v0.1.1"
-git push origin main --tags
-```
-
-Current manual release trigger sequence:
-
-```sh
-git checkout main
-git pull --ff-only origin main
-# edit pyproject.toml version
-git add pyproject.toml README.md
-git commit -m "release v0.1.1"
-git tag -a v0.1.1 -m "v0.1.1"
-git push origin main --tags
-```
-
-This manual sequence is the current source of truth for releases and is a good
-candidate for future automation once the release flow has been exercised a few
-times.
-
-The release workflow builds `sdist` and `wheel` artifacts and attaches them to
-the corresponding GitHub Release.
 
 ## Usage
 
@@ -374,18 +312,7 @@ eq-cli --device <identifier-or-name> --no-shortcuts
 | macOS    | Intended | PortAudio is bundled in the sounddevice wheel. |
 | Linux    | Intended | May require `apt install libportaudio2` or equivalent. |
 
-## Running tests
+## Contributing
 
-```sh
-python -m pip install -e . pytest
-python -m pytest
-```
-
-## Linting and type checking
-
-```sh
-python -m pip install -e . ruff mypy
-python -m ruff check .
-python -m mypy src
-```
+For development setup, testing, linting, and release instructions, see [DEVELOPER.md](DEVELOPER.md).
 
