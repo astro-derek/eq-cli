@@ -73,6 +73,18 @@ def test_render_frame_uses_red_for_peak_markers_when_color_enabled() -> None:
     assert "\x1b[31m" in output
 
 
+def test_serialize_bar_row_groups_contiguous_color_runs() -> None:
+    """Bar row serialization should reuse one ANSI wrapper per contiguous color run."""
+    renderer = TerminalRenderer(color_enabled=True)
+
+    output = renderer._serialize_bar_row(
+        ["=", "=", " ", "^", "^"],
+        ["\x1b[36m", "\x1b[36m", None, "\x1b[31m", "\x1b[31m"],
+    )
+
+    assert output == "\x1b[36m==\x1b[0m \x1b[31m^^\x1b[0m"
+
+
 def test_render_frame_is_monochrome_when_color_disabled() -> None:
     """Rendered output should not include ANSI color codes in monochrome mode."""
     renderer = TerminalRenderer(color_enabled=False)
@@ -82,8 +94,8 @@ def test_render_frame_is_monochrome_when_color_disabled() -> None:
     assert "\x1b[36m" not in output
 
 
-def test_render_frame_uses_in_place_update_after_first_frame() -> None:
-    """Second render should prefix a cursor-up sequence to overwrite previous output."""
+def test_render_frame_skips_output_for_identical_second_frame() -> None:
+    """A repeated identical frame should not emit redundant terminal output."""
     renderer = TerminalRenderer(color_enabled=False)
     frame = build_render_frame()
 
@@ -91,7 +103,59 @@ def test_render_frame_uses_in_place_update_after_first_frame() -> None:
     second_output = renderer.render(frame)
 
     assert not first_output.startswith("\x1b[")
-    assert second_output.startswith("\x1b[") and "A" in second_output[:10]
+    assert second_output == ""
+
+
+def test_render_frame_emits_partial_redraw_for_changed_frame() -> None:
+    """Changed frames should emit cursor-motion updates instead of a full repaint."""
+    renderer = TerminalRenderer(color_enabled=False)
+    original = build_render_frame()
+    updated = RenderFrame(
+        frequencies_hz=original.frequencies_hz,
+        levels_db=tuple([DB_FLOOR] + list(original.levels_db[1:])),
+        peak_levels_db=original.peak_levels_db,
+        history_levels_db=original.history_levels_db,
+        freeze_enabled=original.freeze_enabled,
+    )
+
+    full_output = renderer.render(original)
+    diff_output = renderer.render(updated)
+
+    assert diff_output.startswith("\x1b[")
+    assert len(diff_output) < len(full_output)
+    assert "\x1b[2K" in diff_output
+
+
+def test_render_frame_rebuilds_only_changed_bar_rows() -> None:
+    """Live redraw should not rebuild every graph row when one band changes."""
+    renderer = TerminalRenderer(
+        color_enabled=False,
+        show_title=False,
+        show_shortcuts=False,
+    )
+    original = build_render_frame()
+    updated_levels = list(original.levels_db)
+    updated_levels[5] = updated_levels[5] + 12.0
+    updated = RenderFrame(
+        frequencies_hz=original.frequencies_hz,
+        levels_db=tuple(updated_levels),
+    )
+
+    renderer.render(original)
+
+    build_calls = 0
+    original_build_bar_row = renderer._build_bar_row
+
+    def counting_build_bar_row(*args: object, **kwargs: object) -> str:
+        nonlocal build_calls
+        build_calls += 1
+        return original_build_bar_row(*args, **kwargs)
+
+    renderer._build_bar_row = counting_build_bar_row  # type: ignore[method-assign]
+
+    renderer.render(updated)
+
+    assert 0 < build_calls < len(renderer._row_thresholds)
 
 
 def test_render_snapshot_omits_reposition_prefix_after_live_render() -> None:

@@ -69,6 +69,18 @@ This checklist is the working execution tracker for the MVP. It should be update
 - [x] Feature 0019: Chart snapshot save
   - Status: completed
   - Goal: save the current chart to disk either from a one-shot CLI flow or a runtime hotkey
+- [x] Feature 0020: Spectrum processing refresh-rate headroom
+  - Status: completed
+  - Goal: profile and optimize the DSP hot path to improve refresh-rate headroom without changing behavior
+- [x] Feature 0021: Renderer redraw headroom
+  - Status: completed
+  - Goal: reduce unnecessary terminal output by skipping identical frames and diffing changed lines
+- [x] Feature 0022: Renderer ANSI serialization headroom
+  - Status: completed
+  - Goal: reduce changed-frame renderer CPU and output size by avoiding per-cell ANSI wrapping for contiguous color spans
+- [x] Feature 0023: Renderer logical row reuse
+  - Status: completed
+  - Goal: avoid rebuilding unchanged logical chart rows during live redraws and compare the new result against the original renderer benchmark
 
 ## Update Rules
 - Mark a feature in progress when implementation begins.

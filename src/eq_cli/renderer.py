@@ -53,6 +53,19 @@ class RenderFrame:
     peak_levels_db: tuple[float, ...] | None = None
     history_levels_db: tuple[tuple[float, ...], ...] | None = None
     freeze_enabled: bool = False
+
+
+@dataclass(frozen=True)
+class _RenderLayout:
+    """Cached static layout data derived from the frame frequencies."""
+
+    separator_columns: frozenset[int]
+    axis_notch_columns: frozenset[int]
+    band_columns: tuple[tuple[int, ...], ...]
+    band_spans: tuple[tuple[tuple[int, int], ...], ...]
+    frequency_axis_lines: tuple[str, ...]
+
+
 HISTORY_GRADIENT = " .:-=+*#%@"
 
 
@@ -205,6 +218,9 @@ class TerminalRenderer:
         )
         self._marker_rows = tuple(sorted(self._db_marker_labels))
         self._lines_rendered: int = 0
+        self._previous_lines: tuple[str, ...] | None = None
+        self._previous_frame: RenderFrame | None = None
+        self._layout_cache: dict[tuple[tuple[float, ...], int], _RenderLayout] = {}
 
     def render(self, frame: RenderFrame) -> str:
         """Render a frame with dB rows, bars, and a frequency axis."""
@@ -223,15 +239,63 @@ class TerminalRenderer:
 
     def _render_chart(self, frame: RenderFrame, include_reposition: bool) -> str:
         """Render a frame, optionally adding in-place redraw control sequences."""
+        if (
+            include_reposition
+            and self._previous_frame == frame
+            and self._previous_lines is not None
+        ):
+            return ""
+
         peak_markers = self._compute_peak_markers(frame)
         axis_prefix = self._axis_prefix()
         total_graph_width = self._graph_width
-        separator_columns = self._separator_columns(frame.frequencies_hz)
-        band_columns = self._build_band_columns(
-            len(frame.levels_db),
-            separator_columns,
-        )
+        layout = self._layout_for_frame(frame, axis_prefix)
+        separator_columns = layout.separator_columns
+        band_columns = list(layout.band_columns)
+        band_spans = layout.band_spans
         peak_label_overlays = self._compute_peak_label_overlays(frame, band_columns)
+        if include_reposition and self._can_reuse_live_lines(frame):
+            lines = self._reuse_live_lines(
+                frame=frame,
+                peak_markers=peak_markers,
+                peak_label_overlays=peak_label_overlays,
+                band_spans=band_spans,
+                axis_prefix=axis_prefix,
+                total_graph_width=total_graph_width,
+            )
+        else:
+            lines = self._build_full_lines(
+                frame=frame,
+                layout=layout,
+                peak_markers=peak_markers,
+                peak_label_overlays=peak_label_overlays,
+                band_spans=band_spans,
+                axis_prefix=axis_prefix,
+                total_graph_width=total_graph_width,
+                separator_columns=separator_columns,
+            )
+        output = "\n".join(lines) + "\n"
+        if not include_reposition:
+            return output
+
+        rendered = self._render_live_lines(lines)
+        self._previous_lines = tuple(lines)
+        self._previous_frame = frame
+        self._lines_rendered = len(lines)
+        return rendered
+
+    def _build_full_lines(
+        self,
+        frame: RenderFrame,
+        layout: _RenderLayout,
+        peak_markers: set[tuple[int, float]],
+        peak_label_overlays: dict[int, list[tuple[int, str]]],
+        band_spans: tuple[tuple[tuple[int, int], ...], ...],
+        axis_prefix: str,
+        total_graph_width: int,
+        separator_columns: frozenset[int],
+    ) -> list[str]:
+        """Build all logical lines for a frame from scratch."""
         lines: list[str] = []
         if self._show_title:
             centered_title = self._title_text.center(total_graph_width)
@@ -241,67 +305,271 @@ class TerminalRenderer:
             )
 
         for row_index, threshold in enumerate(self._row_thresholds):
-            bars = self._build_bar_row(
-                levels_db=frame.levels_db,
-                threshold_db=threshold,
-                row_index=row_index,
-                peak_markers=peak_markers,
-                peak_label_overlays=peak_label_overlays,
-                band_columns=band_columns,
-                total_width=total_graph_width,
-            )
-            prefix = self._format_row_prefix(
-                self._db_marker_labels.get(row_index),
-                row_index,
-            )
-            lines.append(prefix + bars)
-
-        baseline = list("-" * total_graph_width)
-        self._apply_separators(baseline, separator_columns)
-        self._apply_axis_notches(
-            baseline,
-            self._axis_notch_columns(frame.frequencies_hz),
-        )
-        lines.append(
-            self._axis_padding()
-            + self._colorize(AXIS_JUNCTION, self._axis_color_code)
-            + self._colorize("".join(baseline), self._axis_color_code)
-        )
-        if self._show_axis_labels:
-            lines.extend(
-                self._build_frequency_axis_lines(
-                    frame.frequencies_hz,
-                    axis_prefix,
-                    total_graph_width,
+            lines.append(
+                self._build_graph_line(
+                    frame=frame,
+                    threshold=threshold,
+                    row_index=row_index,
+                    peak_markers=peak_markers,
+                    peak_label_overlays=peak_label_overlays,
+                    band_spans=band_spans,
+                    total_graph_width=total_graph_width,
                 )
             )
+
+        lines.append(
+            self._build_axis_line(
+                layout,
+                total_graph_width,
+                separator_columns,
+            )
+        )
+        if self._show_axis_labels:
+            lines.extend(layout.frequency_axis_lines)
         lines.extend(
             self._build_history_lines(
                 frame=frame,
-                band_columns=band_columns,
+                band_spans=band_spans,
                 total_graph_width=total_graph_width,
             )
         )
         if self._show_shortcuts:
-            lines.append(
-                axis_prefix
-                + self._colorize(
-                    self._shortcuts_line(frame.freeze_enabled),
-                    self._label_color_code,
-                )
-            )
-        output = "\n".join(lines) + "\n"
-        if not include_reposition:
-            return output
+            lines.append(self._build_shortcuts_line(axis_prefix, frame.freeze_enabled))
+        return lines
 
-        prefix = f"\x1b[{self._lines_rendered}A" if self._lines_rendered > 0 else ""
-        self._lines_rendered = len(lines)
-        return prefix + output
+    def _can_reuse_live_lines(self, frame: RenderFrame) -> bool:
+        """Return whether the previous logical lines can be reused for this frame."""
+        if self._previous_lines is None or self._previous_frame is None:
+            return False
+        if self._previous_frame.frequencies_hz != frame.frequencies_hz:
+            return False
+        if len(self._previous_frame.levels_db) != len(frame.levels_db):
+            return False
+        return len(self._previous_lines) == self._expected_line_count(frame)
+
+    def _expected_line_count(self, frame: RenderFrame) -> int:
+        """Return the total rendered line count for the provided frame."""
+        history_count = min(self._history_rows, len(frame.history_levels_db or ()))
+        return (
+            (1 if self._show_title else 0)
+            + len(self._row_thresholds)
+            + 1
+            + (2 if self._show_axis_labels else 0)
+            + history_count
+            + (1 if self._show_shortcuts else 0)
+        )
+
+    def _reuse_live_lines(
+        self,
+        frame: RenderFrame,
+        peak_markers: set[tuple[int, float]],
+        peak_label_overlays: dict[int, list[tuple[int, str]]],
+        band_spans: tuple[tuple[tuple[int, int], ...], ...],
+        axis_prefix: str,
+        total_graph_width: int,
+    ) -> list[str]:
+        """Reuse previous logical lines and rebuild only dynamic rows that changed."""
+        previous_frame = cast(RenderFrame, self._previous_frame)
+        lines = list(cast(tuple[str, ...], self._previous_lines))
+        graph_start = 1 if self._show_title else 0
+
+        for row_index in self._changed_graph_row_indices(previous_frame, frame):
+            lines[graph_start + row_index] = self._build_graph_line(
+                frame=frame,
+                threshold=self._row_thresholds[row_index],
+                row_index=row_index,
+                peak_markers=peak_markers,
+                peak_label_overlays=peak_label_overlays,
+                band_spans=band_spans,
+                total_graph_width=total_graph_width,
+            )
+
+        history_start = graph_start + len(self._row_thresholds) + 1
+        if self._show_axis_labels:
+            history_start += 2
+
+        previous_history = (previous_frame.history_levels_db or ())[
+            -self._history_rows :
+        ]
+        current_history = (frame.history_levels_db or ())[-self._history_rows :]
+        for history_index, (previous_row, current_row) in enumerate(
+            zip(previous_history, current_history, strict=False)
+        ):
+            if previous_row == current_row:
+                continue
+            lines[history_start + history_index] = self._build_history_line(
+                current_row,
+                band_spans,
+                total_graph_width,
+            )
+
+        if (
+            self._show_shortcuts
+            and frame.freeze_enabled != previous_frame.freeze_enabled
+        ):
+            lines[-1] = self._build_shortcuts_line(axis_prefix, frame.freeze_enabled)
+
+        return lines
+
+    def _changed_graph_row_indices(
+        self,
+        previous_frame: RenderFrame,
+        frame: RenderFrame,
+    ) -> set[int]:
+        """Return graph row indexes whose rendered bar content changed."""
+        if previous_frame.peak_levels_db != frame.peak_levels_db:
+            return set(range(len(self._row_thresholds)))
+
+        changed_rows: set[int] = set()
+        for previous_level, current_level in zip(
+            previous_frame.levels_db,
+            frame.levels_db,
+            strict=False,
+        ):
+            if previous_level == current_level:
+                continue
+            for row_index, threshold in enumerate(self._row_thresholds):
+                if self._fills_bar(previous_level, threshold) != self._fills_bar(
+                    current_level,
+                    threshold,
+                ):
+                    changed_rows.add(row_index)
+        return changed_rows
+
+    def _build_graph_line(
+        self,
+        frame: RenderFrame,
+        threshold: float,
+        row_index: int,
+        peak_markers: set[tuple[int, float]],
+        peak_label_overlays: dict[int, list[tuple[int, str]]],
+        band_spans: tuple[tuple[tuple[int, int], ...], ...],
+        total_graph_width: int,
+    ) -> str:
+        """Build one full graph line including the left-side prefix."""
+        bars = self._build_bar_row(
+            levels_db=frame.levels_db,
+            threshold_db=threshold,
+            row_index=row_index,
+            peak_markers=peak_markers,
+            peak_label_overlays=peak_label_overlays,
+            band_spans=band_spans,
+            total_width=total_graph_width,
+        )
+        prefix = self._format_row_prefix(
+            self._db_marker_labels.get(row_index),
+            row_index,
+        )
+        return prefix + bars
+
+    def _build_axis_line(
+        self,
+        layout: _RenderLayout,
+        total_graph_width: int,
+        separator_columns: frozenset[int],
+    ) -> str:
+        """Build the horizontal axis line."""
+        baseline = list("-" * total_graph_width)
+        self._apply_separators(baseline, separator_columns)
+        self._apply_axis_notches(
+            baseline,
+            set(layout.axis_notch_columns),
+        )
+        return (
+            self._axis_padding()
+            + self._colorize(AXIS_JUNCTION, self._axis_color_code)
+            + self._colorize("".join(baseline), self._axis_color_code)
+        )
+
+    def _build_shortcuts_line(self, axis_prefix: str, freeze_enabled: bool) -> str:
+        """Build the shortcuts/status line."""
+        return axis_prefix + self._colorize(
+            self._shortcuts_line(freeze_enabled),
+            self._label_color_code,
+        )
+
+    def _fills_bar(self, level_db: float, threshold_db: float) -> bool:
+        """Return whether a band level fills the current dB row."""
+        if level_db <= self._db_min:
+            return False
+        return level_db >= max(self._db_min, threshold_db)
+
+    def _layout_for_frame(
+        self,
+        frame: RenderFrame,
+        axis_prefix: str,
+    ) -> _RenderLayout:
+        """Return cached static layout data for a frame's frequency geometry."""
+        key = (frame.frequencies_hz, len(frame.levels_db))
+        layout = self._layout_cache.get(key)
+        if layout is not None:
+            return layout
+
+        separator_columns = frozenset(self._separator_columns(frame.frequencies_hz))
+        axis_notch_columns = frozenset(self._axis_notch_columns(frame.frequencies_hz))
+        band_columns = tuple(
+            self._build_band_columns(
+                len(frame.levels_db),
+                set(separator_columns),
+            )
+        )
+        band_spans = tuple(self._build_band_spans(band_columns))
+        frequency_axis_lines = tuple(
+            self._build_frequency_axis_lines(
+                frame.frequencies_hz,
+                axis_prefix,
+                self._graph_width,
+            )
+        )
+        layout = _RenderLayout(
+            separator_columns=separator_columns,
+            axis_notch_columns=axis_notch_columns,
+            band_columns=band_columns,
+            band_spans=band_spans,
+            frequency_axis_lines=frequency_axis_lines,
+        )
+        self._layout_cache[key] = layout
+        return layout
+
+    def _render_live_lines(self, lines: list[str]) -> str:
+        """Return terminal output that updates only changed lines when possible."""
+        output = "\n".join(lines) + "\n"
+        if self._lines_rendered == 0 or self._previous_lines is None:
+            return output
+        if len(lines) != self._lines_rendered:
+            return f"\x1b[{self._lines_rendered}A" + output
+
+        changed_rows = [
+            index
+            for index, (previous, current) in enumerate(
+                zip(self._previous_lines, lines, strict=False)
+            )
+            if previous != current
+        ]
+        if not changed_rows:
+            return ""
+
+        fragments: list[str] = []
+        current_row = self._lines_rendered
+        for row_index in sorted(changed_rows, reverse=True):
+            rows_up = current_row - row_index
+            if rows_up > 0:
+                fragments.append(f"\x1b[{rows_up}A")
+            fragments.append("\r\x1b[2K")
+            fragments.append(lines[row_index])
+            current_row = row_index
+
+        fragments.append("\r")
+        rows_down = self._lines_rendered - current_row
+        if rows_down > 0:
+            fragments.append(f"\x1b[{rows_down}B")
+        fragments.append("\r")
+        return "".join(fragments)
 
     def _build_history_lines(
         self,
         frame: RenderFrame,
-        band_columns: list[tuple[int, ...]],
+        band_spans: tuple[tuple[tuple[int, int], ...], ...],
         total_graph_width: int,
     ) -> list[str]:
         """Render history rows as a lightweight waterfall under the axis."""
@@ -311,18 +579,35 @@ class TerminalRenderer:
         visible_history = frame.history_levels_db[-self._history_rows :]
         history_lines: list[str] = []
         for history_row in visible_history:
-            row = [" "] * total_graph_width
-            for level_db, columns in zip(history_row, band_columns, strict=False):
-                character = self._history_char(level_db)
-                for column in columns:
-                    row[column] = character
             history_lines.append(
-                self._axis_padding()
-                + self._colorize(AXIS_SEPARATOR, self._axis_color_code)
-                + self._colorize("".join(row), self._history_color_code)
+                self._build_history_line(
+                    history_row,
+                    band_spans,
+                    total_graph_width,
+                )
             )
 
         return history_lines
+
+    def _build_history_line(
+        self,
+        history_row: tuple[float, ...],
+        band_spans: tuple[tuple[tuple[int, int], ...], ...],
+        total_graph_width: int,
+    ) -> str:
+        """Render one history line from a single history row."""
+        row = [" "] * total_graph_width
+        for level_db, spans in zip(history_row, band_spans, strict=False):
+            character = self._history_char(level_db)
+            if character == " ":
+                continue
+            for start, end in spans:
+                row[start:end] = character * (end - start)
+        return (
+            self._axis_padding()
+            + self._colorize(AXIS_SEPARATOR, self._axis_color_code)
+            + self._colorize("".join(row), self._history_color_code)
+        )
 
     def _history_char(self, level_db: float) -> str:
         """Map a dB level to a gradient character for history rendering."""
@@ -384,25 +669,27 @@ class TerminalRenderer:
         row_index: int,
         peak_markers: set[tuple[int, float]],
         peak_label_overlays: dict[int, list[tuple[int, str]]],
-        band_columns: list[tuple[int, ...]],
+        band_spans: tuple[tuple[tuple[int, int], ...], ...],
         total_width: int,
     ) -> str:
         """Build a single rendered dB row including any configured inter-band gaps."""
         row = [" "] * total_width
         color_codes: list[str | None] = [None] * total_width
-        for index, (level_db, columns) in enumerate(
-            zip(levels_db, band_columns, strict=False)
+        for index, (level_db, spans) in enumerate(
+            zip(levels_db, band_spans, strict=False)
         ):
-            segment, color_code = self._render_bar_segment(
+            fill_char, color_code = self._render_bar_fill(
                 level_db=level_db,
                 threshold_db=threshold_db,
-                span_width=len(columns),
                 is_peak_row=(index, threshold_db) in peak_markers,
             )
-            for column, character in zip(columns, segment, strict=False):
-                row[column] = character
+            if fill_char is None:
+                continue
+            for start, end in spans:
+                span_width = end - start
+                row[start:end] = fill_char * span_width
                 if color_code is not None:
-                    color_codes[column] = color_code
+                    color_codes[start:end] = [color_code] * span_width
         for start, label in peak_label_overlays.get(row_index, []):
             for offset, character in enumerate(label):
                 column = start + offset
@@ -516,28 +803,50 @@ class TerminalRenderer:
         peak_row = self._find_peak_row(peak_db)
         return self._row_thresholds.index(peak_row)
 
-    def _render_bar_segment(
+    def _render_bar_fill(
         self,
         level_db: float,
         threshold_db: float,
-        span_width: int,
         is_peak_row: bool = False,
-    ) -> tuple[str, str | None]:
-        if span_width <= 0:
-            return "", None
+    ) -> tuple[str | None, str | None]:
         if is_peak_row and level_db < threshold_db:
             return (
-                self._peak_char * span_width,
+                self._peak_char,
                 self._peak_color_code if self.color_enabled else None,
             )
         if level_db <= self._db_min:
-            return " " * span_width, None
+            return None, None
         if level_db < max(self._db_min, threshold_db):
-            return " " * span_width, None
+            return None, None
         return (
-            self._bar_char * span_width,
+            self._bar_char,
             self._bar_color_code if self.color_enabled else None,
         )
+
+    @staticmethod
+    def _build_band_spans(
+        band_columns: tuple[tuple[int, ...], ...],
+    ) -> list[tuple[tuple[int, int], ...]]:
+        """Collapse each band's columns into contiguous half-open spans."""
+        band_spans: list[tuple[tuple[int, int], ...]] = []
+        for columns in band_columns:
+            if not columns:
+                band_spans.append(())
+                continue
+
+            spans: list[tuple[int, int]] = []
+            start = columns[0]
+            previous = columns[0]
+            for column in columns[1:]:
+                if column == previous + 1:
+                    previous = column
+                    continue
+                spans.append((start, previous + 1))
+                start = column
+                previous = column
+            spans.append((start, previous + 1))
+            band_spans.append(tuple(spans))
+        return band_spans
 
     def _build_frequency_axis(self, frequencies_hz: tuple[float, ...]) -> str:
         if not frequencies_hz:
@@ -777,14 +1086,20 @@ class TerminalRenderer:
         return separators
 
     @staticmethod
-    def _apply_separators(row: list[str], separator_columns: set[int]) -> None:
+    def _apply_separators(
+        row: list[str],
+        separator_columns: frozenset[int] | set[int],
+    ) -> None:
         """Apply vertical separators in-place by blanking target columns."""
         for column in separator_columns:
             if 0 <= column < len(row):
                 row[column] = " "
 
     @staticmethod
-    def _apply_axis_notches(row: list[str], notch_columns: set[int]) -> None:
+    def _apply_axis_notches(
+        row: list[str],
+        notch_columns: frozenset[int] | set[int],
+    ) -> None:
         """Apply horizontal-axis notch characters at labeled frequency columns."""
         for column in notch_columns:
             if 0 <= column < len(row):
@@ -801,13 +1116,33 @@ class TerminalRenderer:
                 color_codes[column] = None
 
     def _serialize_bar_row(self, row: list[str], color_codes: list[str | None]) -> str:
-        """Serialize a character row, applying ANSI color codes per cell."""
+        """Serialize a character row, applying ANSI color codes per contiguous run."""
+        if not self.color_enabled:
+            return "".join(row)
+
+        if not color_codes or all(color_code is None for color_code in color_codes):
+            return "".join(row)
+
         output: list[str] = []
-        for character, color_code in zip(row, color_codes, strict=False):
-            if color_code is not None:
-                output.append(f"{color_code}{character}{RESET}")
+        run_start = 0
+        active_color = color_codes[0]
+        for index in range(1, len(row) + 1):
+            next_color = color_codes[index] if index < len(color_codes) else None
+            if index < len(row) and next_color == active_color:
+                continue
+
+            text = "".join(row[run_start:index])
+            if active_color is not None:
+                output.append(active_color)
+                output.append(text)
+                output.append(RESET)
             else:
-                output.append(character)
+                output.append(text)
+
+            run_start = index
+            if index < len(color_codes):
+                active_color = color_codes[index]
+
         return "".join(output)
 
     def _colorize(self, text: str, color_code: str | None) -> str:

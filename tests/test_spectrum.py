@@ -13,6 +13,17 @@ from eq_cli.spectrum import (
 )
 
 
+def _build_sine_samples(
+    sample_rate: int,
+    frame_size: int,
+    frequency_hz: float,
+    amplitude: float = 1.0,
+) -> np.ndarray:
+    """Build a deterministic sine wave frame for spectrum tests."""
+    time_axis = np.arange(frame_size) / sample_rate
+    return amplitude * np.sin(2.0 * np.pi * frequency_hz * time_axis)
+
+
 def test_build_log_frequency_centers_returns_expected_range() -> None:
     """The band centers should cover 20 Hz to 20 kHz with 32 log-spaced bins."""
     centers = build_log_frequency_centers(20.0, 20_000.0, 32)
@@ -148,6 +159,65 @@ def test_absolute_mode_registers_high_frequency_tones() -> None:
 
     assert result.levels_db[peak_index] > -20.0
     assert result.frequencies_hz[peak_index] > 10_000.0
+
+
+def test_spectrum_processor_is_stable_for_repeated_same_size_frames() -> None:
+    """Repeated absolute-mode processing should be stable for the same frame size."""
+    sample_rate = 48_000
+    samples = _build_sine_samples(sample_rate, 2_048, 1_000.0, amplitude=0.25)
+    frame = AudioFrame(samples=samples, sample_rate=sample_rate)
+    processor = SpectrumProcessor(
+        sample_rate=sample_rate,
+        band_count=64,
+        volume_mode="absolute",
+    )
+
+    first = processor.process_frame(frame)
+    second = processor.process_frame(frame)
+
+    assert first.frequencies_hz == second.frequencies_hz
+    assert np.allclose(first.levels_db, second.levels_db)
+
+
+def test_spectrum_processor_handles_frame_size_changes_without_drift() -> None:
+    """Changing frame size between calls should not corrupt cached DSP state."""
+    sample_rate = 48_000
+    processor = SpectrumProcessor(
+        sample_rate=sample_rate,
+        band_count=64,
+        volume_mode="absolute",
+    )
+
+    small_frame = AudioFrame(
+        samples=_build_sine_samples(sample_rate, 2_048, 1_000.0, amplitude=0.25),
+        sample_rate=sample_rate,
+    )
+    large_frame = AudioFrame(
+        samples=_build_sine_samples(sample_rate, 4_096, 1_000.0, amplitude=0.25),
+        sample_rate=sample_rate,
+    )
+
+    small_before = processor.process_frame(small_frame)
+    large_result = processor.process_frame(large_frame)
+    small_after = processor.process_frame(small_frame)
+
+    small_peak_before = max(
+        range(len(small_before.levels_db)),
+        key=small_before.levels_db.__getitem__,
+    )
+    large_peak = max(
+        range(len(large_result.levels_db)),
+        key=large_result.levels_db.__getitem__,
+    )
+    small_peak_after = max(
+        range(len(small_after.levels_db)),
+        key=small_after.levels_db.__getitem__,
+    )
+
+    assert small_before.frequencies_hz[small_peak_before] > 900.0
+    assert large_result.frequencies_hz[large_peak] > 900.0
+    assert small_after.frequencies_hz[small_peak_after] > 900.0
+    assert np.allclose(small_before.levels_db, small_after.levels_db)
 
 
 def test_spectrum_processor_meets_minimum_throughput_target() -> None:

@@ -30,6 +30,16 @@ class SpectrumBands:
     levels_db: tuple[float, ...]
 
 
+@dataclass(frozen=True)
+class _FrameSizeCache:
+    """Cached FFT metadata for a specific frame size."""
+
+    window: npt.NDArray[np.float64]
+    frequencies_hz: npt.NDArray[np.float64]
+    band_starts: npt.NDArray[np.int64]
+    band_ends: npt.NDArray[np.int64]
+
+
 def build_log_frequency_centers(
     min_frequency_hz: float,
     max_frequency_hz: float,
@@ -113,6 +123,7 @@ class SpectrumProcessor:
             max_frequency_hz,
             band_count,
         )
+        self._band_centers_tuple = tuple(float(value) for value in self._band_centers)
         self._band_edges = build_log_frequency_edges(
             min_frequency_hz,
             max_frequency_hz,
@@ -120,6 +131,7 @@ class SpectrumProcessor:
         )
         self._smooth_peak: float = 1e-10
         self._peak_decay: float = 0.90
+        self._frame_size_cache: dict[int, _FrameSizeCache] = {}
 
     def process_frame(self, frame: AudioFrame) -> SpectrumBands:
         """Convert one audio frame into display-ready log-spaced band levels."""
@@ -128,29 +140,59 @@ class SpectrumProcessor:
         if frame.samples.size == 0:
             raise ValueError("Audio frame must contain at least one sample.")
 
-        frequencies, magnitudes = compute_fft_magnitude(
-            frame.samples,
-            frame.sample_rate,
-        )
+        frame_cache = self._frame_cache(frame.samples.size)
+        windowed = frame.samples * frame_cache.window
+        spectrum = np.fft.rfft(windowed)
+        magnitudes = np.abs(spectrum)
         band_magnitudes = np.zeros(self.band_count, dtype=np.float64)
 
         for index in range(self.band_count):
-            low = self._band_edges[index]
-            high = self._band_edges[index + 1]
-            if index == self.band_count - 1:
-                mask = (frequencies >= low) & (frequencies <= high)
-            else:
-                mask = (frequencies >= low) & (frequencies < high)
-
-            if np.any(mask):
-                band_magnitudes[index] = float(np.max(magnitudes[mask]))
+            start = int(frame_cache.band_starts[index])
+            end = int(frame_cache.band_ends[index])
+            if start < end:
+                band_magnitudes[index] = float(np.max(magnitudes[start:end]))
 
         levels_db = self._levels_to_db(band_magnitudes, frame.samples.size)
 
         return SpectrumBands(
-            frequencies_hz=tuple(float(value) for value in self._band_centers),
+            frequencies_hz=self._band_centers_tuple,
             levels_db=tuple(float(value) for value in levels_db),
         )
+
+    def _frame_cache(self, frame_size: int) -> _FrameSizeCache:
+        """Return cached FFT metadata for the requested frame size."""
+        cache = self._frame_size_cache.get(frame_size)
+        if cache is not None:
+            return cache
+
+        frequencies_hz = np.fft.rfftfreq(
+            frame_size,
+            d=1.0 / float(self.sample_rate),
+        ).astype(np.float64)
+        band_starts = np.searchsorted(
+            frequencies_hz,
+            self._band_edges[:-1],
+            side="left",
+        ).astype(np.int64)
+        band_ends = np.searchsorted(
+            frequencies_hz,
+            self._band_edges[1:],
+            side="left",
+        ).astype(np.int64)
+        band_ends[-1] = np.searchsorted(
+            frequencies_hz,
+            self._band_edges[-1],
+            side="right",
+        )
+
+        cache = _FrameSizeCache(
+            window=np.hanning(frame_size),
+            frequencies_hz=frequencies_hz,
+            band_starts=band_starts,
+            band_ends=band_ends,
+        )
+        self._frame_size_cache[frame_size] = cache
+        return cache
 
     def _levels_to_db(
         self,
