@@ -227,7 +227,8 @@ class TerminalRenderer:
                 db_interval=db_interval,
             )
         self._marker_rows = tuple(sorted(self._db_marker_labels))
-        # Ascending copy of row_thresholds used for O(log n) bisect lookups.
+        # _row_thresholds is descending (db_max → db_min); reverse it to get an
+        # ascending list that bisect can use for O(log n) peak-row lookups.
         self._row_thresholds_asc: list[float] = list(reversed(self._row_thresholds))
         self._lines_rendered: int = 0
         self._previous_lines: tuple[str, ...] | None = None

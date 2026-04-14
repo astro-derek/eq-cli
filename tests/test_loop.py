@@ -223,6 +223,8 @@ def test_save_profile_export_does_not_overwrite_existing_file(
     tmp_path: Path,
 ) -> None:
     """Concurrent atomic creates must not clobber each other's files."""
+    import json
+
     # Simulate two concurrent writers by pre-creating slot 001 with known content.
     slot1 = tmp_path / "eq-cli-profile-001.json"
     slot1.write_text(
@@ -233,8 +235,13 @@ def test_save_profile_export_does_not_overwrite_existing_file(
     path = _save_profile_export({"gain": 1.0}, export_dir=str(tmp_path))
     assert path.name == "eq-cli-profile-002.json"
 
-    # Original file is intact.
-    assert slot1.read_text(encoding="utf-8").startswith('{"profiles"')
+    # Slot 001 retains its original content — not overwritten.
+    slot1_data = json.loads(slot1.read_text(encoding="utf-8"))
+    assert slot1_data["profiles"]["eq-cli-profile-001"]["gain"] == 99
+
+    # Slot 002 contains the profile we just wrote.
+    slot2_data = json.loads(path.read_text(encoding="utf-8"))
+    assert slot2_data["profiles"]["eq-cli-profile-002"]["gain"] == 1.0
 
 
 def test_save_profile_export_no_longer_exposes_next_profile_export_path() -> None:
