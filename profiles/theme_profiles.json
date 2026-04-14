@@ -1,0 +1,124 @@
+{
+  "profiles": {
+    "default": {
+      "volume_mode": "relative",
+      "channel_mode": "mono",
+      "peak_hold_frames": 0,
+      "history_rows": 0,
+      "history_gradient": " .:-=+*#%@",
+      "db_min": -80.0,
+      "db_max": 6.0,
+      "db_interval": 10.0,
+      "graph_width": 120,
+      "band_gap": 0,
+      "bar_char": "#",
+      "peak_char": "-",
+      "axis_labels": false,
+      "show_shortcuts": true,
+      "title": true,
+      "db_marker_style": "spaced",
+      "colors": {
+        "bar": "cyan",
+        "peak": "red"
+      }
+    },
+    "studio": {
+      "volume_mode": "absolute",
+      "channel_mode": "sum",
+      "peak_hold_frames": 12,
+      "history_rows": 6,
+      "history_gradient": " .:-=+*#%@",
+      "db_min": -70.0,
+      "db_max": 6.0,
+      "db_interval": 6.0,
+      "graph_width": 120,
+      "band_gap": 1,
+      "bar_char": "=",
+      "peak_char": "^",
+      "axis_labels": true,
+      "show_shortcuts": true,
+      "title": true,
+      "title_text": "eq-cli studio",
+      "db_marker_style": "minimal",
+      "colors": {
+        "axis": "bright_black",
+        "label": "bright_white",
+        "bar": "green",
+        "peak": "bright_red"
+      }
+    },
+    "green-based": {
+      "volume_mode": "relative",
+      "channel_mode": "mono",
+      "peak_hold_frames": 6,
+      "history_rows": 6,
+      "history_gradient": " .:-=+*#%@",
+      "db_min": -80.0,
+      "db_max": 6.0,
+      "db_interval": 10.0,
+      "graph_width": 120,
+      "band_gap": 1,
+      "bar_char": "#",
+      "peak_char": "*",
+      "axis_labels": true,
+      "show_shortcuts": true,
+      "title": true,
+      "title_text": "eq-cli green-based",
+      "db_marker_style": "spaced",
+      "colors": {
+        "axis": "bright_green",
+        "label": "green",
+        "bar": "green",
+        "peak": "bright_green",
+        "history": "bright_green"
+      }
+    },
+    "minimal": {
+      "volume_mode": "relative",
+      "channel_mode": "mono",
+      "peak_hold_frames": 0,
+      "history_rows": 0,
+      "history_gradient": " .:-=+*#%@",
+      "db_min": -80.0,
+      "db_max": 0.0,
+      "db_interval": 20.0,
+      "graph_width": 100,
+      "band_gap": 0,
+      "bar_char": "|",
+      "peak_char": ".",
+      "axis_labels": false,
+      "show_shortcuts": false,
+      "title": false,
+      "db_marker_style": "minimal",
+      "colors": {
+        "bar": "white",
+        "peak": "bright_white"
+      }
+    },
+    "high-contrast": {
+      "volume_mode": "relative",
+      "channel_mode": "sum",
+      "peak_hold_frames": 4,
+      "history_rows": 6,
+      "history_gradient": " .:-=+*#%@",
+      "db_min": -80.0,
+      "db_max": 6.0,
+      "db_interval": 10.0,
+      "graph_width": 120,
+      "band_gap": 1,
+      "bar_char": "#",
+      "peak_char": "*",
+      "axis_labels": true,
+      "show_shortcuts": true,
+      "title": true,
+      "title_text": "eq-cli high-contrast",
+      "db_marker_style": "all",
+      "colors": {
+        "axis": "bright_white",
+        "label": "bright_yellow",
+        "bar": "bright_cyan",
+        "peak": "bright_red"
+      }
+    }
+  }
+}

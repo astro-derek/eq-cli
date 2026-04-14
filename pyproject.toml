@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "eq-cli"
+version = "0.1.0"
+description = "Real-time terminal equalizer"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = ["numpy>=2.4,<3", "sounddevice>=0.5"]
+
+[project.scripts]
+eq-cli = "eq_cli.cli:run"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+mypy_path = ["src"]
+packages = ["eq_cli"]
