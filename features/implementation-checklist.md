@@ -84,6 +84,12 @@ This checklist is the working execution tracker for the MVP. It should be update
 - [x] Feature 0024: Deployment and distribution automation
   - Status: completed
   - Goal: build deployable Python artifacts from CI and Git tags, and document the release process
+- [x] Feature 0025: Code quality and stability fixes
+  - Status: completed
+  - Goal: address six high-priority issues from senior developer review (bugs C2/C3, cross-validation M3, release hardening M7/M8, deferred import C1, RenderConfig dataclass M4, table-driven merge M5)
+- [x] Feature 0026: Remaining code review items
+  - Status: completed
+  - Goal: address the six items deferred from feature-0025 (m1 marker style bug, m2 dead code, m3 O(n) scan, m4 TOCTOU race, m7 missing docs/cov, m10 unbounded caches)
 
 ## Update Rules
 - Mark a feature in progress when implementation begins.

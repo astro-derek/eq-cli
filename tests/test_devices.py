@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -8,6 +9,7 @@ import pytest
 
 from eq_cli.audio import AudioInputDevice, AudioInputDeviceProvider
 from eq_cli.cli import main
+from eq_cli.loop import RenderConfig
 
 
 @dataclass
@@ -205,9 +207,11 @@ def test_main_applies_peak_hold_frames_from_profile(
     """Built-in profile peak hold should be applied before loop start."""
     captured: dict[str, object] = {}
 
-    def _fake_run_equalizer(device: AudioInputDevice, **kwargs: object) -> int:
+    def _fake_run_equalizer(
+        device: AudioInputDevice, config: RenderConfig | None = None
+    ) -> int:
         captured["device"] = device
-        captured.update(kwargs)
+        captured.update(dataclasses.asdict(config) if config is not None else {})
         return 0
 
     monkeypatch.setattr("eq_cli.cli.run_equalizer", _fake_run_equalizer)
@@ -252,9 +256,11 @@ def test_main_applies_peak_db_labels_from_profile(
         encoding="utf-8",
     )
 
-    def _fake_run_equalizer(device: AudioInputDevice, **kwargs: object) -> int:
+    def _fake_run_equalizer(
+        device: AudioInputDevice, config: RenderConfig | None = None
+    ) -> int:
         captured["device"] = device
-        captured.update(kwargs)
+        captured.update(dataclasses.asdict(config) if config is not None else {})
         return 0
 
     monkeypatch.setattr("eq_cli.cli.run_equalizer", _fake_run_equalizer)
@@ -283,9 +289,11 @@ def test_main_passes_exportable_profile_to_loop(
     """CLI should pass the effective exportable profile configuration to the loop."""
     captured: dict[str, object] = {}
 
-    def _fake_run_equalizer(device: AudioInputDevice, **kwargs: object) -> int:
+    def _fake_run_equalizer(
+        device: AudioInputDevice, config: RenderConfig | None = None
+    ) -> int:
         captured["device"] = device
-        captured.update(kwargs)
+        captured.update(dataclasses.asdict(config) if config is not None else {})
         return 0
 
     monkeypatch.setattr("eq_cli.cli.run_equalizer", _fake_run_equalizer)
@@ -353,9 +361,11 @@ def test_main_applies_extended_runtime_settings_from_profile(
         encoding="utf-8",
     )
 
-    def _fake_run_equalizer(device: AudioInputDevice, **kwargs: object) -> int:
+    def _fake_run_equalizer(
+        device: AudioInputDevice, config: RenderConfig | None = None
+    ) -> int:
         captured["device"] = device
-        captured.update(kwargs)
+        captured.update(dataclasses.asdict(config) if config is not None else {})
         return 0
 
     monkeypatch.setattr("eq_cli.cli.run_equalizer", _fake_run_equalizer)
@@ -387,9 +397,11 @@ def test_main_passes_explicit_graph_height_to_loop(
     """CLI should forward explicit graph height to the render loop."""
     captured: dict[str, object] = {}
 
-    def _fake_run_equalizer(device: AudioInputDevice, **kwargs: object) -> int:
+    def _fake_run_equalizer(
+        device: AudioInputDevice, config: RenderConfig | None = None
+    ) -> int:
         captured["device"] = device
-        captured.update(kwargs)
+        captured.update(dataclasses.asdict(config) if config is not None else {})
         return 0
 
     monkeypatch.setattr("eq_cli.cli.run_equalizer", _fake_run_equalizer)
@@ -410,9 +422,11 @@ def test_main_passes_axis_frequencies_and_block_size_to_loop(
     """CLI should forward custom axis labels and block size to the loop."""
     captured: dict[str, object] = {}
 
-    def _fake_run_equalizer(device: AudioInputDevice, **kwargs: object) -> int:
+    def _fake_run_equalizer(
+        device: AudioInputDevice, config: RenderConfig | None = None
+    ) -> int:
         captured["device"] = device
-        captured.update(kwargs)
+        captured.update(dataclasses.asdict(config) if config is not None else {})
         return 0
 
     monkeypatch.setattr("eq_cli.cli.run_equalizer", _fake_run_equalizer)
@@ -441,9 +455,11 @@ def test_main_passes_snapshot_settings_to_loop(
     """CLI should forward snapshot configuration to the render loop."""
     captured: dict[str, object] = {}
 
-    def _fake_run_equalizer(device: AudioInputDevice, **kwargs: object) -> int:
+    def _fake_run_equalizer(
+        device: AudioInputDevice, config: RenderConfig | None = None
+    ) -> int:
         captured["device"] = device
-        captured.update(kwargs)
+        captured.update(dataclasses.asdict(config) if config is not None else {})
         return 0
 
     monkeypatch.setattr("eq_cli.cli.run_equalizer", _fake_run_equalizer)
@@ -475,9 +491,11 @@ def test_main_mode_studio_applies_preset_defaults(
     """Mode presets should apply default behavior for studio analysis."""
     captured: dict[str, object] = {}
 
-    def _fake_run_equalizer(device: AudioInputDevice, **kwargs: object) -> int:
+    def _fake_run_equalizer(
+        device: AudioInputDevice, config: RenderConfig | None = None
+    ) -> int:
         captured["device"] = device
-        captured.update(kwargs)
+        captured.update(dataclasses.asdict(config) if config is not None else {})
         return 0
 
     monkeypatch.setattr("eq_cli.cli.run_equalizer", _fake_run_equalizer)
@@ -501,9 +519,11 @@ def test_main_mode_allows_explicit_cli_overrides(
     """Explicit CLI flags should override mode preset defaults."""
     captured: dict[str, object] = {}
 
-    def _fake_run_equalizer(device: AudioInputDevice, **kwargs: object) -> int:
+    def _fake_run_equalizer(
+        device: AudioInputDevice, config: RenderConfig | None = None
+    ) -> int:
         captured["device"] = device
-        captured.update(kwargs)
+        captured.update(dataclasses.asdict(config) if config is not None else {})
         return 0
 
     monkeypatch.setattr("eq_cli.cli.run_equalizer", _fake_run_equalizer)
