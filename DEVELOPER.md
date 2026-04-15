@@ -16,20 +16,27 @@ procedures for `eq-cli`.
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install -e .
+python -m pip install -e .[dev]
 ```
+
+The `dev` extras install `pytest`, `pytest-cov`, `ruff`, and `mypy` in one
+step.
 
 ## Running Tests
 
 ```sh
-python -m pip install -e . pytest
 python -m pytest
+```
+
+Collect coverage at the same time:
+
+```sh
+python -m pytest --cov=eq_cli
 ```
 
 ## Linting and Type Checking
 
 ```sh
-python -m pip install -e . ruff mypy
 python -m ruff check .
 python -m mypy src
 ```
@@ -50,6 +57,9 @@ Pushes and pull requests to `main` run a CI workflow that:
 
 This confirms that the repo is still capable of producing deployable Python
 artifacts.
+
+The release workflow also runs the same `pytest`, `ruff`, and `mypy` checks
+before building artifacts, preventing a broken release from being published.
 
 ### Cut a Release
 
@@ -89,3 +99,9 @@ times.
 
 The release workflow builds `sdist` and `wheel` artifacts and attaches them to
 the corresponding GitHub Release.
+
+## Changelog and Security
+
+Notable changes between releases are tracked in [CHANGELOG.md](CHANGELOG.md).
+
+For reporting security vulnerabilities, see [SECURITY.md](SECURITY.md).

@@ -153,8 +153,9 @@ eq-cli --device <identifier-or-name> --db-min -80 --db-max 6 --db-interval 6
 ```
 
 `--db-min` sets the bottom of the dB scale (default: -80) and `--db-max` sets
-the top (default: 6). `--db-interval` controls the row spacing in dB (default:
-10); smaller intervals produce more rows and finer vertical resolution.
+the top (default: 6); `--db-min` must be less than `--db-max`. `--db-interval`
+controls the row spacing in dB (default: 10); smaller intervals produce more
+rows and finer vertical resolution. The interval must be greater than zero.
 
 ### Enable axis labels (opt-in)
 
