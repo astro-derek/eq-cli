@@ -371,6 +371,66 @@ state (`ON`/`OFF`). You can hide it with:
 eq-cli --device <identifier-or-name> --no-shortcuts
 ```
 
+## Web UI mode
+
+`eq-cli` includes a second UI mode that renders the spectrum in your browser
+using the Web Audio API.  In this mode Python serves only a local configuration
+endpoint; all audio capture and real-time FFT processing run entirely inside the
+browser with no round-trip to Python.  This makes the web version faster than
+the terminal renderer because it runs at the native display refresh rate
+(60–144 Hz) using GPU-accelerated `<canvas>` drawing.
+
+### Start the web UI
+
+```sh
+eq-cli --ui web
+```
+
+The server starts on `http://127.0.0.1:8080/` by default.  Open the URL in
+any modern browser, click **Detect Devices** to grant microphone permission,
+select an input device and click **▶ Start**.
+
+### Open browser automatically
+
+```sh
+eq-cli --ui web --open-browser
+```
+
+### Customise host and port
+
+```sh
+eq-cli --ui web --web-host 127.0.0.1 --web-port 8888
+```
+
+The server is bound to loopback (`127.0.0.1`) by default so it is not reachable
+from other machines.  The web UI is designed for single-user, localhost-only
+access with no authentication.
+
+### Use a profile with web mode
+
+All profile and color options work the same in web mode and are forwarded to the
+browser as display configuration:
+
+```sh
+eq-cli --ui web --profile studio
+eq-cli --ui web --profile high-contrast --color-bar green --color-peak red
+eq-cli --ui web --db-min -60 --db-max 0 --history-rows 4
+```
+
+### Browser controls
+
+| Key / button | Action |
+|---|---|
+| `F` or Freeze button | Toggle freeze (hold current frame) |
+| `R` or Reset Peaks button | Clear all peak markers |
+| `S` or Snapshot button | Save a PNG of the current display |
+| Vol dropdown | Switch between Relative and Absolute volume mode |
+| Ch dropdown | Select channel (Sum / Left / Right / Mid / Side / Mono) |
+
+> **Note:** The `side` channel mode (L−R) requires an `AudioWorklet` that is
+> not yet implemented; it falls back to `sum` in the browser.  All other channel
+> modes are fully supported via `ChannelSplitterNode`.
+
 ## Platform notes
 
 | Platform | Tested | Notes |

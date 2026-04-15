@@ -1,0 +1,240 @@
+"""Tests for the web server and configuration helpers."""
+from __future__ import annotations
+
+import json
+import urllib.error
+import urllib.request
+
+import pytest
+
+from eq_cli.loop import RenderConfig
+from eq_cli.web import WebServer, ansi_to_css, build_web_config
+
+# ── ansi_to_css ────────────────────────────────────────────────────────────────
+
+
+def test_ansi_to_css_cyan() -> None:
+    """Cyan ANSI code should map to the expected CSS hex color."""
+    assert ansi_to_css("\x1b[36m") == "#44cccc"
+
+
+def test_ansi_to_css_red() -> None:
+    """Red ANSI code should map to the expected CSS hex color."""
+    assert ansi_to_css("\x1b[31m") == "#cc4444"
+
+
+def test_ansi_to_css_green() -> None:
+    """Green ANSI code should map to the expected CSS hex color."""
+    assert ansi_to_css("\x1b[32m") == "#44cc44"
+
+
+def test_ansi_to_css_bright_white() -> None:
+    """Bright white (97) ANSI code should map to the expected CSS hex color."""
+    assert ansi_to_css("\x1b[97m") == "#ffffff"
+
+
+def test_ansi_to_css_none_returns_default() -> None:
+    """None input should return the default grey color."""
+    assert ansi_to_css(None) == "#aaaaaa"
+
+
+def test_ansi_to_css_unrecognised_returns_default() -> None:
+    """An unrecognised ANSI code should fall back to the default grey."""
+    assert ansi_to_css("\x1b[99m") == "#aaaaaa"
+
+
+def test_ansi_to_css_empty_string_returns_default() -> None:
+    """An empty string should fall back to the default grey."""
+    assert ansi_to_css("") == "#aaaaaa"
+
+
+# ── build_web_config ──────────────────────────────────────────────────────────
+
+
+def test_build_web_config_has_required_keys() -> None:
+    """The web config dict must contain all keys consumed by the browser UI."""
+    cfg = build_web_config(RenderConfig())
+    required = {
+        "db_min", "db_max", "db_interval", "graph_height", "band_count",
+        "gain_db", "volume_mode", "channel_mode",
+        "bar_color", "peak_color", "history_color", "axis_color", "label_color",
+        "show_title", "title_text", "show_axis_labels", "show_shortcuts",
+        "db_marker_style", "history_rows", "peak_hold_frames",
+    }
+    missing = required - cfg.keys()
+    assert not missing, f"Missing config keys: {missing}"
+
+
+def test_build_web_config_bar_color_is_css_hex() -> None:
+    """bar_color should be a CSS hex string derived from the ANSI code."""
+    cfg = build_web_config(RenderConfig(bar_color_code="\x1b[36m"))
+    assert cfg["bar_color"] == "#44cccc"
+
+
+def test_build_web_config_peak_color_is_css_hex() -> None:
+    """peak_color should be a CSS hex string derived from the ANSI code."""
+    cfg = build_web_config(RenderConfig(peak_color_code="\x1b[31m"))
+    assert cfg["peak_color"] == "#cc4444"
+
+
+def test_build_web_config_resolves_auto_graph_height() -> None:
+    """graph_height=0 should be resolved to a positive integer."""
+    cfg = build_web_config(
+        RenderConfig(db_min=-80, db_max=6, db_interval=10, graph_height=0)
+    )
+    assert cfg["graph_height"] > 0
+
+
+def test_build_web_config_preserves_explicit_graph_height() -> None:
+    """An explicit non-zero graph_height must be preserved unchanged."""
+    cfg = build_web_config(RenderConfig(graph_height=20))
+    assert cfg["graph_height"] == 20
+
+
+def test_build_web_config_passthrough_scalars() -> None:
+    """Scalar display fields should be forwarded unchanged."""
+    cfg = build_web_config(
+        RenderConfig(
+            db_min=-60.0,
+            db_max=0.0,
+            db_interval=6.0,
+            gain_db=3.0,
+            history_rows=4,
+            peak_hold_frames=8,
+        )
+    )
+    assert cfg["db_min"] == -60.0
+    assert cfg["db_max"] == 0.0
+    assert cfg["db_interval"] == 6.0
+    assert cfg["gain_db"] == 3.0
+    assert cfg["history_rows"] == 4
+    assert cfg["peak_hold_frames"] == 8
+
+
+def test_build_web_config_axis_frequencies_none_by_default() -> None:
+    """axis_frequencies should be None when not configured."""
+    cfg = build_web_config(RenderConfig())
+    assert cfg["axis_frequencies"] is None
+
+
+def test_build_web_config_axis_frequencies_serialised() -> None:
+    """axis_frequencies should be serialised to a list when configured."""
+    cfg = build_web_config(
+        RenderConfig(axis_frequencies=(100.0, 1000.0, 10000.0))
+    )
+    assert cfg["axis_frequencies"] == [100.0, 1000.0, 10000.0]
+
+
+# ── WebServer lifecycle ───────────────────────────────────────────────────────
+
+
+def test_web_server_port_zero_gets_os_assigned_port() -> None:
+    """Binding to port 0 should result in an OS-assigned non-zero port."""
+    server = WebServer("127.0.0.1", 0, build_web_config(RenderConfig()))
+    server.start()
+    try:
+        assert server.port > 0
+    finally:
+        server.stop()
+
+
+def test_web_server_url_reflects_bound_port() -> None:
+    """The url property should embed the actual bound port."""
+    server = WebServer("127.0.0.1", 0, build_web_config(RenderConfig()))
+    server.start()
+    try:
+        assert server.url.startswith("http://127.0.0.1:")
+        assert str(server.port) in server.url
+    finally:
+        server.stop()
+
+
+def test_web_server_serves_config_json() -> None:
+    """The /config endpoint should return a JSON object with db_min."""
+    config_data = build_web_config(RenderConfig())
+    server = WebServer("127.0.0.1", 0, config_data)
+    server.start()
+    try:
+        with urllib.request.urlopen(f"{server.url}config") as resp:
+            data = json.loads(resp.read())
+        assert data["db_min"] == -80.0
+        assert "bar_color" in data
+    finally:
+        server.stop()
+
+
+def test_web_server_config_content_type_is_json() -> None:
+    """The /config endpoint Content-Type header should be application/json."""
+    server = WebServer("127.0.0.1", 0, build_web_config(RenderConfig()))
+    server.start()
+    try:
+        with urllib.request.urlopen(f"{server.url}config") as resp:
+            assert "application/json" in resp.headers.get("Content-Type", "")
+    finally:
+        server.stop()
+
+
+def test_web_server_serves_index_html() -> None:
+    """The root endpoint should serve the HTML page with a canvas element."""
+    server = WebServer("127.0.0.1", 0, build_web_config(RenderConfig()))
+    server.start()
+    try:
+        with urllib.request.urlopen(f"{server.url}") as resp:
+            html = resp.read().decode()
+        assert "<canvas" in html
+        assert "eq-cli" in html
+    finally:
+        server.stop()
+
+
+def test_web_server_serves_index_html_via_explicit_path() -> None:
+    """Accessing /index.html explicitly should also serve the page."""
+    server = WebServer("127.0.0.1", 0, build_web_config(RenderConfig()))
+    server.start()
+    try:
+        with urllib.request.urlopen(f"{server.url}index.html") as resp:
+            html = resp.read().decode()
+        assert "<canvas" in html
+    finally:
+        server.stop()
+
+
+def test_web_server_returns_404_for_unknown_path() -> None:
+    """Requesting an unknown path should produce a 404 response."""
+    server = WebServer("127.0.0.1", 0, build_web_config(RenderConfig()))
+    server.start()
+    try:
+        with pytest.raises(urllib.error.HTTPError) as exc_info:
+            urllib.request.urlopen(f"{server.url}nonexistent")
+        assert exc_info.value.code == 404
+    finally:
+        server.stop()
+
+
+def test_web_server_stop_is_idempotent() -> None:
+    """Calling stop() after the server has already stopped must not raise."""
+    server = WebServer("127.0.0.1", 0, build_web_config(RenderConfig()))
+    server.start()
+    server.stop()
+    server.stop()  # second call should be silent
+
+
+def test_web_server_config_reflects_custom_render_config() -> None:
+    """Custom RenderConfig values must be visible in the served /config JSON."""
+    custom = RenderConfig(
+        db_min=-60.0,
+        db_max=0.0,
+        volume_mode="absolute",
+        show_title=False,
+    )
+    server = WebServer("127.0.0.1", 0, build_web_config(custom))
+    server.start()
+    try:
+        with urllib.request.urlopen(f"{server.url}config") as resp:
+            data = json.loads(resp.read())
+        assert data["db_min"] == -60.0
+        assert data["db_max"] == 0.0
+        assert data["volume_mode"] == "absolute"
+        assert data["show_title"] is False
+    finally:
+        server.stop()

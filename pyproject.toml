@@ -32,3 +32,6 @@ python_version = "3.12"
 strict = true
 mypy_path = ["src"]
 packages = ["eq_cli"]
+
+[tool.setuptools.package-data]
+eq_cli = ["static/*"]

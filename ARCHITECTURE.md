@@ -59,3 +59,57 @@ markers - there's no need for every row to have one.
 
 ## Open UI Bug
 - No open UI bugs currently captured here.
+
+## Dual UI Architecture
+
+`eq-cli` supports two independent rendering paths that share the same CLI,
+profile system, and display configuration layer:
+
+### Terminal mode (default)
+
+- Python captures audio via `sounddevice` + PortAudio.
+- `SpectrumProcessor` computes per-band dB levels using numpy FFT with a Hann
+  window.
+- `TerminalRenderer` converts the `RenderFrame` into ANSI text and writes it
+  to stdout via in-place redraw (cursor positioning).
+- The render loop runs at a configurable refresh rate (default 30 Hz, up to
+  60+ Hz) driven by `time.perf_counter` pacing.
+
+### Web mode (`--ui web`)
+
+- Python runs a local HTTP server (`http.server.ThreadingHTTPServer`) bound to
+  loopback (`127.0.0.1`; single-user, no authentication).
+- The server exposes two endpoints:
+  - `GET /` — serves `src/eq_cli/static/index.html` (the complete app).
+  - `GET /config` — returns display parameters derived from the active CLI
+    profile as a JSON object (CSS hex colors, resolved graph height, all
+    rendering options).
+- The browser handles everything else:
+  - `getUserMedia` acquires the audio stream from the selected input device.
+  - `AnalyserNode` (fftSize 4096, Hann window, no time smoothing) produces
+    per-frame FFT magnitude data in dBFS.
+  - JavaScript computes 64 log-spaced band levels from the FFT bins using
+    the same `geomspace(20, 20000, 65)` edge formula as `SpectrumProcessor`.
+  - Peak tracking and history buffering run client-side.
+  - `requestAnimationFrame` drives the render loop at the display's native
+    refresh rate (typically 60–144 Hz).
+  - GPU-accelerated `<canvas>` draws bars, peak markers, frequency axis
+    labels, dB markers, title, history rows, and shortcuts bar using the
+    same layout logic as `TerminalRenderer`.
+  - Keyboard shortcuts `F` / `R` / `S` map to Freeze / Reset Peaks / Snapshot.
+
+### Configuration bridge
+
+`build_web_config()` in `web.py` translates a `RenderConfig` object into a
+flat JSON dict: ANSI color codes become CSS hex strings, `graph_height=0` is
+resolved to its computed value, and all display options are forwarded.  The
+terminal renderer path is completely unchanged.
+
+### Why web mode is faster
+
+| Factor | Terminal | Web |
+|---|---|---|
+| Render rate | Configurable, default 30 fps | Native display rate (60–144 fps) |
+| Drawing | ANSI escape codes, software rasterization | GPU-accelerated canvas |
+| Audio latency | Python sounddevice queue → numpy FFT | OS audio callback → AnalyserNode |
+| No-signal overhead | None | None |

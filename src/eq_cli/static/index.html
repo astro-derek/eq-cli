@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>eq-cli</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0d1117;
+      color: #c9d1d9;
+      font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+      font-size: 13px;
+      display: flex;
+      flex-direction: column;
+      height: 100dvh;
+      overflow: hidden;
+    }
+
+    #toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      background: #161b22;
+      border-bottom: 1px solid #21262d;
+      flex-shrink: 0;
+      flex-wrap: wrap;
+    }
+
+    .tb-group { display: flex; align-items: center; gap: 6px; }
+
+    .tb-sep {
+      width: 1px;
+      height: 20px;
+      background: #30363d;
+      flex-shrink: 0;
+    }
+
+    label { color: #8b949e; font-size: 11px; white-space: nowrap; }
+
+    select, button {
+      background: #21262d;
+      color: #c9d1d9;
+      border: 1px solid #30363d;
+      padding: 3px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    select:focus, button:focus { outline: 1px solid #58a6ff; }
+    button:hover { background: #30363d; }
+    button.active { background: #1f6feb; border-color: #58a6ff; color: #e6edf3; }
+
+    #device-select { max-width: 220px; }
+
+    #status {
+      margin-left: auto;
+      font-size: 11px;
+      color: #8b949e;
+      white-space: nowrap;
+    }
+    #status.ok   { color: #3fb950; }
+    #status.err  { color: #f85149; }
+    #status.warn { color: #d29922; }
+
+    #canvas-container { flex: 1; position: relative; min-height: 0; }
+
+    canvas { display: block; width: 100%; height: 100%; }
+
+    #start-prompt {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+    }
+
+    #start-card {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 22px 30px;
+      text-align: center;
+      pointer-events: auto;
+      max-width: 340px;
+    }
+
+    #start-card h2 { color: #58a6ff; margin-bottom: 8px; font-size: 15px; }
+    #start-card p  { color: #8b949e; font-size: 12px; margin-bottom: 16px; line-height: 1.5; }
+    #btn-detect    { font-size: 12px; padding: 6px 18px; }
+
+    #helpbar {
+      font-size: 11px;
+      color: #484f58;
+      padding: 3px 10px;
+      background: #0d1117;
+      border-top: 1px solid #21262d;
+      flex-shrink: 0;
+      user-select: none;
+    }
+  </style>
+</head>
+<body>
+
+<div id="toolbar">
+  <div class="tb-group">
+    <label for="device-select">&#127908;</label>
+    <select id="device-select" title="Audio input device">
+      <option value="">&#8212; select device &#8212;</option>
+    </select>
+    <button id="btn-start">&#9654; Start</button>
+    <button id="btn-stop" style="display:none">&#9632; Stop</button>
+  </div>
+  <div class="tb-sep"></div>
+  <div class="tb-group">
+    <label for="sel-volume">Vol:</label>
+    <select id="sel-volume" title="Volume mode">
+      <option value="relative">Relative</option>
+      <option value="absolute">Absolute</option>
+    </select>
+    <label for="sel-channel">Ch:</label>
+    <select id="sel-channel" title="Channel mode">
+      <option value="sum">Sum</option>
+      <option value="left">Left</option>
+      <option value="right">Right</option>
+      <option value="mid">Mid</option>
+      <option value="side">Side</option>
+      <option value="mono">Mono</option>
+    </select>
+  </div>
+  <div class="tb-sep"></div>
+  <div class="tb-group">
+    <button id="btn-freeze" title="[F] Freeze display">Freeze</button>
+    <button id="btn-reset"  title="[R] Reset peaks">Reset Peaks</button>
+    <button id="btn-snap"   title="[S] Save PNG">&#128247; Snapshot</button>
+  </div>
+  <span id="status">No device selected</span>
+</div>
+
+<div id="canvas-container">
+  <canvas id="eq-canvas"></canvas>
+  <div id="start-prompt">
+    <div id="start-card">
+      <h2>eq-cli web</h2>
+      <p>Click below to allow microphone access, then select a device and click Start.</p>
+      <button id="btn-detect">Detect Devices</button>
+    </div>
+  </div>
+</div>
+
+<div id="helpbar">[F] Freeze &nbsp;&middot;&nbsp; [R] Reset Peaks &nbsp;&middot;&nbsp; [S] Snapshot</div>
+
+<script>
+'use strict';
+
+// ── Default config (overwritten from /config on load) ─────────────────────────
+var CFG = {
+  db_min: -80, db_max: 6, db_interval: 10, graph_height: 10,
+  band_count: 64, gain_db: 0, volume_mode: 'relative', channel_mode: 'sum',
+  bar_color: '#44cccc', peak_color: '#cc4444',
+  history_color: '#44cccc', axis_color: '#666666', label_color: '#aaaaaa',
+  show_title: true, title_text: 'eq-cli',
+  show_axis_labels: true, show_shortcuts: false,
+  db_marker_style: 'spaced', history_rows: 0,
+  history_gradient: ' .:-=+*#%@',
+  peak_hold_frames: 0, peak_db_labels: false,
+  axis_frequencies: null, band_gap: 0
+};
+
+async function loadConfig() {
+  try {
+    var r = await fetch('/config');
+    if (r.ok) { Object.assign(CFG, await r.json()); }
+  } catch (e) { console.warn('Failed to load config, using defaults:', e); }
+}
+
+// ── Audio state ───────────────────────────────────────────────────────────────
+var audioCtx = null, analyserNode = null, mediaStream = null;
+
+// ── Spectrum state ────────────────────────────────────────────────────────────
+var peakLevels = null;      // Float32Array
+var peakHoldCounts = null;  // Int32Array
+var historyRows = [];       // Float32Array[], newest last
+var frozen = false;
+var frozenLevels = null;    // Float32Array cached when frozen
+
+var PEAK_DECAY_DB = 0.5;
+
+function ensurePeakArrays() {
+  var n = CFG.band_count;
+  if (!peakLevels || peakLevels.length !== n) {
+    peakLevels = new Float32Array(n).fill(CFG.db_min);
+    peakHoldCounts = new Int32Array(n);
+  }
+}
+
+// ── Log-spaced band geometry (matches Python SpectrumProcessor) ───────────────
+function buildBandEdges(minHz, maxHz, count) {
+  var e = new Float64Array(count + 1);
+  for (var i = 0; i <= count; i++) {
+    e[i] = minHz * Math.pow(maxHz / minHz, i / count);
+  }
+  return e;
+}
+
+var BAND_EDGES = buildBandEdges(20, 20000, CFG.band_count);
+var BAND_CENTERS = (function () {
+  var c = new Float64Array(CFG.band_count);
+  for (var i = 0; i < c.length; i++) {
+    c[i] = Math.sqrt(BAND_EDGES[i] * BAND_EDGES[i + 1]);
+  }
+  return c;
+}());
+
+function rebuildBandGeometry() {
+  BAND_EDGES = buildBandEdges(20, 20000, CFG.band_count);
+  BAND_CENTERS = new Float64Array(CFG.band_count);
+  for (var i = 0; i < BAND_CENTERS.length; i++) {
+    BAND_CENTERS[i] = Math.sqrt(BAND_EDGES[i] * BAND_EDGES[i + 1]);
+  }
+}
+
+// ── FFT bins → band levels (dBFS) ────────────────────────────────────────────
+var _fftBuf = new Float32Array(2048); // reused each frame
+
+function computeBandLevels(fftData, sampleRate, fftSize) {
+  var binHz = sampleRate / fftSize;
+  var count = CFG.band_count;
+  var out = new Float32Array(count);
+  for (var b = 0; b < count; b++) {
+    var lo = Math.max(0, Math.floor(BAND_EDGES[b] / binHz));
+    var hi = Math.min(fftData.length - 1, Math.ceil(BAND_EDGES[b + 1] / binHz));
+    var mx = -Infinity;
+    for (var k = lo; k <= hi; k++) {
+      var v = fftData[k];
+      if (isFinite(v) && v > mx) { mx = v; }
+    }
+    out[b] = isFinite(mx) ? mx : CFG.db_min;
+  }
+  return out;
+}
+
+function applyVolumeMode(rawLevels) {
+  var n = rawLevels.length;
+  var mode = document.getElementById('sel-volume').value;
+  var gain = CFG.gain_db || 0;
+  var dbMin = CFG.db_min, dbMax = CFG.db_max;
+  var out = new Float32Array(n);
+  if (mode === 'relative') {
+    var peak = -Infinity;
+    for (var i = 0; i < n; i++) { if (rawLevels[i] > peak) { peak = rawLevels[i]; } }
+    var offset = isFinite(peak) ? peak : 0;
+    for (var j = 0; j < n; j++) {
+      out[j] = Math.min(dbMax, Math.max(dbMin, rawLevels[j] - offset + gain));
+    }
+  } else {
+    for (var k = 0; k < n; k++) {
+      out[k] = Math.min(dbMax, Math.max(dbMin, rawLevels[k] + gain));
+    }
+  }
+  return out;
+}
+
+// ── Peak tracking ─────────────────────────────────────────────────────────────
+function updatePeaks(levels) {
+  ensurePeakArrays();
+  var hold = CFG.peak_hold_frames || 0;
+  for (var i = 0; i < levels.length; i++) {
+    var v = Math.min(levels[i], CFG.db_max);
+    if (v >= peakLevels[i]) {
+      peakLevels[i] = v;
+      peakHoldCounts[i] = hold;
+    } else if (peakHoldCounts[i] > 0) {
+      peakHoldCounts[i]--;
+    } else {
+      peakLevels[i] = Math.max(CFG.db_min, peakLevels[i] - PEAK_DECAY_DB);
+    }
+  }
+}
+
+function resetPeaks() {
+  if (peakLevels) {
+    peakLevels.fill(CFG.db_min);
+    if (peakHoldCounts) { peakHoldCounts.fill(0); }
+  }
+}
+
+// ── History ring buffer ───────────────────────────────────────────────────────
+function addHistory(levels) {
+  var maxR = CFG.history_rows || 0;
+  if (maxR <= 0) { return; }
+  historyRows.push(Float32Array.from(levels));
+  while (historyRows.length > maxR) { historyRows.shift(); }
+}
+
+// ── Canvas geometry ───────────────────────────────────────────────────────────
+var canvas = document.getElementById('eq-canvas');
+var ctx = canvas.getContext('2d');
+var dpr = 1;
+var L = {};              // layout: pixel positions and sizes
+var rowThresholds = [];  // [graph_height] floats, db_max down to db_min
+var dbLabelRows = {};    // rowIndex → label string
+var bandSpans = [];      // [{x,w}] one per band
+var freqMarkers = [];    // [{freq,x,label}] for horizontal axis
+
+function initLayout() {
+  dpr = window.devicePixelRatio || 1;
+  var cont = document.getElementById('canvas-container');
+  var W = cont.clientWidth, H = cont.clientHeight;
+  canvas.width = Math.round(W * dpr);
+  canvas.height = Math.round(H * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  var TITLE_H  = CFG.show_title       ? 28 : 0;
+  var LABEL_W  = CFG.show_axis_labels ? 66 : 6;
+  var NOTCH_W  = CFG.show_axis_labels ?  2 : 0;
+  var FREQ_AXH = 2;
+  var FREQ_LH  = CFG.show_axis_labels ? 44 : 0;
+  var HIST_RH  = 16;
+  var histN    = Math.max(0, CFG.history_rows || 0);
+  var SHORTC_H = 20;
+
+  var barX = LABEL_W + NOTCH_W;
+  var barY = TITLE_H;
+  var barW = W - LABEL_W - NOTCH_W;
+  var barH = H - TITLE_H - FREQ_AXH - FREQ_LH - histN * HIST_RH - SHORTC_H;
+
+  L = {
+    W: W, H: H,
+    titleH: TITLE_H, labelW: LABEL_W, notchW: NOTCH_W,
+    freqAxH: FREQ_AXH, freqLblH: FREQ_LH,
+    histRowH: HIST_RH, histN: histN,
+    shortcutsH: SHORTC_H,
+    barX: barX, barY: barY, barW: barW, barH: barH,
+    rowH: barH / Math.max(1, CFG.graph_height || 10),
+    freqAxY : barY + barH,
+    freqLblY: barY + barH + FREQ_AXH,
+    histY   : barY + barH + FREQ_AXH + FREQ_LH,
+    shortY  : H - SHORTC_H
+  };
+
+  buildRowThresholds();
+  buildDbLabelRows();
+  buildBandSpans();
+  buildFreqMarkers();
+}
+
+function buildRowThresholds() {
+  var h = CFG.graph_height || 10;
+  rowThresholds = [];
+  if (h <= 1) { rowThresholds = [CFG.db_max]; return; }
+  var step = (CFG.db_max - CFG.db_min) / (h - 1);
+  for (var i = 0; i < h; i++) {
+    rowThresholds.push(Math.round((CFG.db_max - i * step) * 1e10) / 1e10);
+  }
+}
+
+function buildDbLabelRows() {
+  dbLabelRows = {};
+  var dbMin = CFG.db_min, dbMax = CFG.db_max;
+  var dbInterval = CFG.db_interval, style = CFG.db_marker_style;
+
+  if (style === 'all') {
+    rowThresholds.forEach(function (t, i) { dbLabelRows[i] = String(Math.round(t)); });
+    return;
+  }
+
+  // Collect interval-boundary dB values
+  var top = Math.floor(dbMax / dbInterval) * dbInterval;
+  var vals = [];
+  var c = top;
+  while (c >= dbMin - 1e-9) {
+    vals.push(c);
+    c = Math.round((c - dbInterval) * 1e10) / 1e10;
+  }
+  if (!vals.length || Math.abs(vals[0] - dbMax) > 1e-9) { vals.unshift(dbMax); }
+
+  // Map each boundary to the nearest row threshold
+  var rowMap = {};
+  vals.forEach(function (v) {
+    var best = 0, bestDist = Infinity;
+    for (var i = 0; i < rowThresholds.length; i++) {
+      var d = Math.abs(rowThresholds[i] - v);
+      if (d < bestDist) { bestDist = d; best = i; }
+    }
+    if (!(best in rowMap) ||
+        bestDist < Math.abs(rowThresholds[best] - Number(rowMap[best]))) {
+      rowMap[best] = String(Math.round(v));
+    }
+  });
+
+  if (style === 'minimal') {
+    var rows = Object.keys(rowMap).map(Number).sort(function (a, b) { return a - b; });
+    if (rows.length > 2) {
+      var keep = [rows[0], rows[rows.length - 1], rows[Math.floor(rows.length / 2)]];
+      var f = {};
+      keep.forEach(function (r) { if (r in rowMap) { f[r] = rowMap[r]; } });
+      dbLabelRows = f;
+      return;
+    }
+  }
+  dbLabelRows = rowMap;
+}
+
+function buildBandSpans() {
+  // Equal-pixel division of the bar area, matching the terminal renderer.
+  bandSpans = [];
+  var W = L.barW, count = CFG.band_count;
+  for (var i = 0; i < count; i++) {
+    var x0 = Math.round(i * W / count);
+    var x1 = Math.round((i + 1) * W / count);
+    bandSpans.push({ x: L.barX + x0, w: Math.max(1, x1 - x0) });
+  }
+}
+
+function buildFreqMarkers() {
+  freqMarkers = [];
+  if (!CFG.show_axis_labels) { return; }
+  var defaults = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 15000, 20000];
+  var marks = (CFG.axis_frequencies && CFG.axis_frequencies.length)
+    ? CFG.axis_frequencies : defaults;
+  var minF = BAND_CENTERS[0], maxF = BAND_CENTERS[BAND_CENTERS.length - 1];
+  var logRange = Math.log10(maxF) - Math.log10(minF);
+  marks.forEach(function (freq, idx) {
+    if (freq < minF * 0.9 || freq > maxF * 1.1) { return; }
+    var norm = (Math.log10(freq) - Math.log10(minF)) / logRange;
+    var x = L.barX + Math.round(norm * (L.barW - 1));
+    var isLast = (idx === marks.length - 1);
+    var label;
+    if (freq >= 1000) {
+      label = isLast
+        ? (Math.round(freq / 1000) + 'kHz')
+        : (Math.round(freq / 1000) + 'k');
+    } else {
+      label = isLast ? (Math.round(freq) + 'Hz') : String(Math.round(freq));
+    }
+    freqMarkers.push({ freq: freq, x: x, label: label });
+  });
+}
+
+function dbToY(db) {
+  var norm = (CFG.db_max - db) / (CFG.db_max - CFG.db_min);
+  return L.barY + norm * L.barH;
+}
+
+// ── Canvas rendering ──────────────────────────────────────────────────────────
+function drawFrame(levels, peaks, isFrozen) {
+  var W = L.W, H = L.H;
+  var barX = L.barX, barY = L.barY, barW = L.barW, barH = L.barH;
+  var titleH = L.titleH, labelW = L.labelW;
+  var freqAxY = L.freqAxY, freqLblY = L.freqLblY;
+  var histY = L.histY, shortY = L.shortY;
+  var histN = L.histN, histRowH = L.histRowH;
+
+  if (barW <= 0 || barH <= 0) { return; }
+
+  // Background
+  ctx.fillStyle = '#0d1117';
+  ctx.fillRect(0, 0, W, H);
+
+  // Title
+  if (CFG.show_title && titleH > 0) {
+    ctx.font = 'bold 13px Consolas,monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = CFG.label_color;
+    var titleStr = isFrozen
+      ? (CFG.title_text + ' \u25ae FROZEN')
+      : CFG.title_text;
+    ctx.fillText(titleStr, W / 2, titleH / 2);
+  }
+
+  // dB axis labels
+  if (CFG.show_axis_labels && labelW > 6) {
+    ctx.font = '10px Consolas,monospace';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = CFG.label_color;
+    Object.keys(dbLabelRows).forEach(function (ri) {
+      var y = barY + Number(ri) * L.rowH + L.rowH / 2;
+      ctx.fillText(dbLabelRows[ri] + ' dB', labelW - 2, y);
+    });
+  }
+
+  // Vertical axis line
+  ctx.fillStyle = CFG.axis_color;
+  ctx.fillRect(barX - 1, barY, 1, barH + L.freqAxH);
+
+  // Bars
+  ctx.fillStyle = CFG.bar_color;
+  for (var i = 0; i < levels.length; i++) {
+    var db = levels[i];
+    if (db <= CFG.db_min) { continue; }
+    var sp = bandSpans[i];
+    var top = dbToY(db);
+    var ht = barY + barH - top;
+    if (ht > 0) { ctx.fillRect(sp.x, top, sp.w, ht); }
+  }
+
+  // Peak markers (1px horizontal stroke per band)
+  if (peaks) {
+    ctx.fillStyle = CFG.peak_color;
+    for (var j = 0; j < peaks.length; j++) {
+      var pdb = peaks[j];
+      if (pdb <= CFG.db_min) { continue; }
+      var psp = bandSpans[j];
+      var py = Math.round(dbToY(pdb));
+      ctx.fillRect(psp.x, py, psp.w, 1);
+    }
+  }
+
+  // Horizontal frequency axis line
+  ctx.fillStyle = CFG.axis_color;
+  ctx.fillRect(barX, freqAxY, barW, 1);
+
+  if (CFG.show_axis_labels) {
+    // Tick notches
+    freqMarkers.forEach(function (m) {
+      ctx.fillStyle = CFG.axis_color;
+      ctx.fillRect(m.x, freqAxY - 3, 1, 5);
+    });
+
+    // Two-pass staggered frequency labels to avoid overlap
+    ctx.font = '10px Consolas,monospace';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = CFG.label_color;
+    var placed = [];
+    for (var pass = 0; pass < 2; pass++) {
+      freqMarkers.forEach(function (m) {
+        var lw = ctx.measureText(m.label).width;
+        var lx = Math.max(barX, Math.min(barX + barW - lw, m.x - lw / 2));
+        var ly = freqLblY + pass * 16;
+        var overlaps = placed.some(function (p) {
+          return p[2] === ly && lx < p[0] + p[1] + 4 && lx + lw + 4 > p[0];
+        });
+        if (!overlaps) {
+          ctx.fillText(m.label, lx, ly);
+          placed.push([lx, lw, ly]);
+        }
+      });
+    }
+  }
+
+  // History rows (opacity-scaled rectangles)
+  if (histN > 0 && historyRows.length > 0) {
+    var dbRange = CFG.db_max - CFG.db_min;
+    var visible = historyRows.slice(-histN);
+    for (var row = 0; row < visible.length; row++) {
+      var rowData = visible[row];
+      var ry = histY + row * histRowH;
+      for (var bi = 0; bi < rowData.length; bi++) {
+        var norm = Math.max(0, Math.min(1, (rowData[bi] - CFG.db_min) / dbRange));
+        if (norm < 0.02) { continue; }
+        var hsp = bandSpans[bi];
+        ctx.globalAlpha = norm;
+        ctx.fillStyle = CFG.history_color;
+        ctx.fillRect(hsp.x, ry + 1, hsp.w, histRowH - 2);
+      }
+    }
+    ctx.globalAlpha = 1.0;
+  }
+
+  // Shortcuts bar
+  ctx.font = '10px Consolas,monospace';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#484f58';
+  var fStr = isFrozen ? 'ON' : 'OFF';
+  ctx.fillText(
+    '[F] Freeze: ' + fStr + '  [R] Reset Peaks  [S] Snapshot',
+    barX + 4, shortY + 10
+  );
+}
+
+// ── Audio setup ───────────────────────────────────────────────────────────────
+async function enumerateDevices() {
+  var sel = document.getElementById('device-select');
+  try {
+    var devs = await navigator.mediaDevices.enumerateDevices();
+    var inputs = devs.filter(function (d) { return d.kind === 'audioinput'; });
+    sel.innerHTML = '<option value="">\u2014 select device \u2014</option>';
+    inputs.forEach(function (d) {
+      var o = document.createElement('option');
+      o.value = d.deviceId;
+      o.textContent = d.label || ('Microphone (' + d.deviceId.slice(0, 8) + '\u2026)');
+      sel.appendChild(o);
+    });
+    if (!inputs.length) { setStatus('No audio input devices found', 'warn'); }
+  } catch (e) {
+    setStatus('Cannot list devices: ' + e.message, 'err');
+  }
+}
+
+async function requestPermissionAndEnumerate() {
+  try {
+    var tmp = await navigator.mediaDevices.getUserMedia({ audio: true });
+    tmp.getTracks().forEach(function (t) { t.stop(); });
+    await enumerateDevices();
+    document.getElementById('start-prompt').style.display = 'none';
+    setStatus('Ready \u2014 select a device and click \u25b6 Start', '');
+  } catch (e) {
+    setStatus('Microphone access denied: ' + e.message, 'err');
+  }
+}
+
+async function startAudio(deviceId) {
+  stopAudio();
+  try {
+    var constraints = {
+      audio: {
+        deviceId: deviceId ? { exact: deviceId } : undefined,
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+        sampleRate: { ideal: 48000 }
+      }
+    };
+    mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)({
+      sampleRate: 48000
+    });
+    var source = audioCtx.createMediaStreamSource(mediaStream);
+    analyserNode = audioCtx.createAnalyser();
+    analyserNode.fftSize = 4096;
+    analyserNode.smoothingTimeConstant = 0;
+    analyserNode.minDecibels = -120;
+    analyserNode.maxDecibels = 0;
+    connectChain(source, analyserNode);
+
+    ensurePeakArrays();
+    resetPeaks();
+    historyRows = [];
+    frozenLevels = null;
+
+    setStatus('Analyzing\u2026', 'ok');
+    document.getElementById('btn-start').style.display = 'none';
+    document.getElementById('btn-stop').style.display = '';
+  } catch (e) {
+    setStatus('Audio error: ' + e.message, 'err');
+  }
+}
+
+function connectChain(source, analyser) {
+  var mode = document.getElementById('sel-channel').value;
+  if (mode === 'left' || mode === 'right') {
+    // Extract a single channel via ChannelSplitterNode
+    var splitter = audioCtx.createChannelSplitter(2);
+    source.connect(splitter);
+    splitter.connect(analyser, mode === 'left' ? 0 : 1, 0);
+  } else {
+    // sum / mid / mono: browser downmixes stereo automatically.
+    // side (L-R) is not supported without AudioWorklet; falls back to sum.
+    source.connect(analyser);
+  }
+}
+
+function stopAudio() {
+  if (analyserNode) { analyserNode.disconnect(); analyserNode = null; }
+  if (audioCtx)     { audioCtx.close();          audioCtx = null;     }
+  if (mediaStream)  {
+    mediaStream.getTracks().forEach(function (t) { t.stop(); });
+    mediaStream = null;
+  }
+  document.getElementById('btn-start').style.display = '';
+  document.getElementById('btn-stop').style.display  = 'none';
+  setStatus('Stopped', '');
+}
+
+// ── Render loop ───────────────────────────────────────────────────────────────
+var rafId = null;
+
+function startLoop() {
+  if (rafId !== null) { return; }
+  function tick() {
+    rafId = requestAnimationFrame(tick);
+    renderTick();
+  }
+  rafId = requestAnimationFrame(tick);
+}
+
+function renderTick() {
+  var levels;
+  if (analyserNode) {
+    if (frozen && frozenLevels) {
+      levels = frozenLevels;
+    } else {
+      var binCount = analyserNode.frequencyBinCount;
+      var fftData = (_fftBuf.length >= binCount) ? _fftBuf : new Float32Array(binCount);
+      analyserNode.getFloatFrequencyData(fftData);
+      var raw = computeBandLevels(fftData, audioCtx.sampleRate, analyserNode.fftSize);
+      levels = applyVolumeMode(raw);
+      if (!frozen) {
+        updatePeaks(levels);
+        addHistory(levels);
+        frozenLevels = levels;
+      }
+    }
+  } else {
+    levels = new Float32Array(CFG.band_count).fill(CFG.db_min);
+  }
+  drawFrame(levels, peakLevels, frozen);
+}
+
+// ── UI wiring ─────────────────────────────────────────────────────────────────
+function setStatus(msg, cls) {
+  var el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = cls || '';
+}
+
+document.getElementById('btn-detect').addEventListener('click', function () {
+  requestPermissionAndEnumerate();
+});
+
+document.getElementById('btn-start').addEventListener('click', async function () {
+  var deviceId = document.getElementById('device-select').value;
+  if (!deviceId) { setStatus('Select a device first', 'warn'); return; }
+  await startAudio(deviceId);
+});
+
+document.getElementById('btn-stop').addEventListener('click', stopAudio);
+
+document.getElementById('btn-freeze').addEventListener('click', function () {
+  frozen = !frozen;
+  var btn = document.getElementById('btn-freeze');
+  btn.classList.toggle('active', frozen);
+  btn.textContent = frozen ? '\u258e\u258e Frozen' : 'Freeze';
+});
+
+document.getElementById('btn-reset').addEventListener('click', resetPeaks);
+
+document.getElementById('btn-snap').addEventListener('click', function () {
+  var a = document.createElement('a');
+  a.download = 'eq-cli-' + Date.now() + '.png';
+  a.href = canvas.toDataURL('image/png');
+  a.click();
+});
+
+document.addEventListener('keydown', function (e) {
+  if (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT') { return; }
+  switch (e.key.toLowerCase()) {
+    case 'f':
+      document.getElementById('btn-freeze').click();
+      e.preventDefault();
+      break;
+    case 'r':
+      resetPeaks();
+      e.preventDefault();
+      break;
+    case 's':
+      document.getElementById('btn-snap').click();
+      e.preventDefault();
+      break;
+  }
+});
+
+// Reinitialise canvas pixel layout whenever the container changes size
+var _ro = new ResizeObserver(function () { initLayout(); });
+_ro.observe(document.getElementById('canvas-container'));
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+async function init() {
+  await loadConfig();
+  rebuildBandGeometry();
+  ensurePeakArrays();
+
+  document.title = CFG.title_text || 'eq-cli';
+  document.getElementById('sel-volume').value = CFG.volume_mode || 'relative';
+  document.getElementById('sel-channel').value = CFG.channel_mode || 'sum';
+
+  initLayout();
+  startLoop();
+
+  // If microphone permission was already granted, device labels will be
+  // populated; skip the detect prompt in that case.
+  try {
+    var devs = await navigator.mediaDevices.enumerateDevices();
+    if (devs.some(function (d) { return d.kind === 'audioinput' && d.label; })) {
+      document.getElementById('start-prompt').style.display = 'none';
+      await enumerateDevices();
+      setStatus('Ready \u2014 select a device and click \u25b6 Start', '');
+    }
+  } catch (e) { console.warn('Device enumeration failed, will prompt on detect click:', e); }
+}
+
+init();
+</script>
+</body>
+</html>
