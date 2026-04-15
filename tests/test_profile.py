@@ -270,3 +270,43 @@ def test_resolve_color_code_rejects_unsupported_values() -> None:
     """Color resolver should reject unknown color values."""
     with pytest.raises(ValueError, match="Unsupported color value"):
         resolve_color_code("not-a-color")
+
+# ---------------------------------------------------------------------------
+# C3: db_interval positivity validation in profile files
+# ---------------------------------------------------------------------------
+
+
+def test_load_profile_rejects_zero_db_interval(tmp_path: Path) -> None:
+    """Profile validation should reject a db_interval of zero."""
+    profile_path = tmp_path / "profiles.json"
+    profile_path.write_text(
+        json.dumps({"profiles": {"broken": {"db_interval": 0}}}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="must be greater than zero"):
+        load_profile(str(profile_path), "broken")
+
+
+def test_load_profile_rejects_negative_db_interval(tmp_path: Path) -> None:
+    """Profile validation should reject a negative db_interval."""
+    profile_path = tmp_path / "profiles.json"
+    profile_path.write_text(
+        json.dumps({"profiles": {"broken": {"db_interval": -5}}}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="must be greater than zero"):
+        load_profile(str(profile_path), "broken")
+
+
+def test_load_profile_accepts_positive_db_interval(tmp_path: Path) -> None:
+    """Profile validation should accept a positive db_interval."""
+    profile_path = tmp_path / "profiles.json"
+    profile_path.write_text(
+        json.dumps({"profiles": {"ok": {"db_interval": 6.0}}}),
+        encoding="utf-8",
+    )
+
+    profile = load_profile(str(profile_path), "ok")
+    assert profile["db_interval"] == 6.0

@@ -235,3 +235,26 @@ def test_spectrum_processor_meets_minimum_throughput_target() -> None:
     duration = time.perf_counter() - start
 
     assert duration < 5.0
+
+
+# ---------------------------------------------------------------------------
+# m2: dead functions removed
+# ---------------------------------------------------------------------------
+
+
+def test_apply_window_no_longer_exported() -> None:
+    """apply_window should have been removed as it was dead code."""
+    import eq_cli.spectrum as spectrum_module
+
+    assert not hasattr(spectrum_module, "apply_window"), (
+        "apply_window was dead code and should have been removed"
+    )
+
+
+def test_compute_fft_magnitude_no_longer_exported() -> None:
+    """compute_fft_magnitude should have been removed as it was dead code."""
+    import eq_cli.spectrum as spectrum_module
+
+    assert not hasattr(spectrum_module, "compute_fft_magnitude"), (
+        "compute_fft_magnitude was dead code and should have been removed"
+    )

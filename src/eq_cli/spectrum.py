@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Literal
 
@@ -12,6 +13,7 @@ MIN_FREQUENCY_HZ = 20.0
 MAX_FREQUENCY_HZ = 20_000.0
 DEFAULT_BAND_COUNT = 64
 DEFAULT_VOLUME_MODE: Literal["relative", "absolute"] = "relative"
+_FRAME_CACHE_MAX_SIZE = 8
 
 
 @dataclass(frozen=True)
@@ -75,23 +77,6 @@ def build_log_frequency_edges(
     )
 
 
-def apply_window(samples: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
-    """Apply a Hann window to reduce FFT spectral leakage."""
-    return samples * np.hanning(samples.size)
-
-
-def compute_fft_magnitude(
-    samples: npt.NDArray[np.float64],
-    sample_rate: int,
-) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
-    """Convert a frame of samples into FFT bin frequencies and magnitudes."""
-    windowed = apply_window(samples)
-    spectrum = np.fft.rfft(windowed)
-    frequencies = np.fft.rfftfreq(samples.size, d=1.0 / float(sample_rate))
-    magnitudes = np.abs(spectrum)
-    return frequencies.astype(np.float64), magnitudes.astype(np.float64)
-
-
 def magnitude_to_db(values: npt.ArrayLike) -> npt.NDArray[np.float64]:
     """Convert linear magnitudes to dB with a fixed floor for silence."""
     magnitudes = np.asarray(values, dtype=np.float64)
@@ -131,7 +116,7 @@ class SpectrumProcessor:
         )
         self._smooth_peak: float = 1e-10
         self._peak_decay: float = 0.90
-        self._frame_size_cache: dict[int, _FrameSizeCache] = {}
+        self._frame_size_cache: OrderedDict[int, _FrameSizeCache] = OrderedDict()
 
     def process_frame(self, frame: AudioFrame) -> SpectrumBands:
         """Convert one audio frame into display-ready log-spaced band levels."""
@@ -191,6 +176,8 @@ class SpectrumProcessor:
             band_starts=band_starts,
             band_ends=band_ends,
         )
+        if len(self._frame_size_cache) >= _FRAME_CACHE_MAX_SIZE:
+            self._frame_size_cache.popitem(last=False)
         self._frame_size_cache[frame_size] = cache
         return cache
 

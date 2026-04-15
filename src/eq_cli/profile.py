@@ -128,7 +128,7 @@ _BUILTIN_PROFILES: dict[str, "RenderProfile"] = {
     },
 }
 
-_PROFILE_NUMERIC_KEYS = {"gain", "db_min", "db_max", "db_interval"}
+_PROFILE_NUMERIC_KEYS = {"gain", "db_min", "db_max"}
 _PROFILE_INTEGER_KEYS = {
     "block_size",
     "graph_height",
@@ -149,7 +149,10 @@ _PROFILE_STRING_KEYS = {
 }
 _PROFILE_FORMAT_KEYS = {"snapshot_format"}
 _PROFILE_SEQUENCE_KEYS = {"axis_frequencies"}
-_PROFILE_SPECIAL_NUMERIC_KEYS = {"refresh_rate"}
+# Keys that require a numeric parse AND an additional positivity constraint.
+# They are validated individually in _validate_profile rather than via the
+# generic _PROFILE_NUMERIC_KEYS loop, which only calls _validate_number.
+_PROFILE_SPECIAL_NUMERIC_KEYS = {"refresh_rate", "db_interval"}
 _PROFILE_CHAR_KEYS = {"bar_char", "peak_char"}
 _PROFILE_COLOR_KEYS = {"axis", "label", "bar", "peak", "history"}
 _PROFILE_KEYS = (
@@ -358,6 +361,11 @@ def _validate_profile(profile_name: str, profile: object, source: str) -> Render
             if refresh_rate <= 0:
                 raise ValueError(f"{field_label} must be greater than zero.")
             validated[key] = refresh_rate
+        elif key == "db_interval":
+            db_interval = _validate_number(value, field_label)
+            if db_interval <= 0:
+                raise ValueError(f"{field_label} must be greater than zero.")
+            validated[key] = db_interval
         elif key == "channel_mode":
             channel_mode = _validate_string(value, field_label)
             if channel_mode not in {"mono", "left", "right", "sum", "mid", "side"}:

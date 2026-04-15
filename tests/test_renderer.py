@@ -1,10 +1,22 @@
 from __future__ import annotations
 
+import numpy as np
 import pytest
 
 import eq_cli.renderer as renderer_module
-from eq_cli.renderer import RenderFrame, TerminalRenderer, supports_color
-from eq_cli.spectrum import DB_FLOOR, build_log_frequency_centers
+from eq_cli.renderer import (
+    _LAYOUT_CACHE_MAX_SIZE,
+    RenderFrame,
+    TerminalRenderer,
+    supports_color,
+)
+from eq_cli.spectrum import (
+    _FRAME_CACHE_MAX_SIZE,
+    DB_FLOOR,
+    AudioFrame,
+    SpectrumProcessor,
+    build_log_frequency_centers,
+)
 
 
 def build_render_frame() -> RenderFrame:
@@ -729,3 +741,139 @@ def test_render_frame_history_rows_use_history_color_override() -> None:
     output = renderer.render(with_history)
 
     assert "\x1b[33m" in output
+
+
+# ---------------------------------------------------------------------------
+# m1: 'spaced' vs 'all' db marker style
+# ---------------------------------------------------------------------------
+
+
+def test_render_frame_db_marker_style_spaced_shows_only_interval_rows() -> None:
+    """'spaced' must label only interval-aligned rows, not every row."""
+    renderer_spaced = TerminalRenderer(
+        color_enabled=False,
+        show_axis_labels=True,
+        db_marker_style="spaced",
+        db_min=-60.0,
+        db_max=0.0,
+        db_interval=10.0,
+    )
+    renderer_all = TerminalRenderer(
+        color_enabled=False,
+        show_axis_labels=True,
+        db_marker_style="all",
+        db_min=-60.0,
+        db_max=0.0,
+        db_interval=10.0,
+    )
+
+    frame = build_render_frame()
+    output_spaced = renderer_spaced.render(frame)
+    output_all = renderer_all.render(frame)
+
+    labeled_spaced = [line for line in output_spaced.splitlines() if " dB +" in line]
+    labeled_all = [line for line in output_all.splitlines() if " dB +" in line]
+
+    # 'spaced' must show fewer (or equal) labels than 'all'.
+    assert len(labeled_spaced) <= len(labeled_all)
+    # 'spaced' must show at least 2 labeled rows (0 dB and -60 dB).
+    assert len(labeled_spaced) >= 2
+    # 'all' must label every bar row.
+    bar_row_count = sum(
+        1
+        for line in output_all.splitlines()
+        if "+" in line and " dB " in line
+    )
+    assert len(labeled_all) == bar_row_count
+
+
+def test_render_frame_db_marker_style_all_labels_every_row() -> None:
+    """'all' must add a dB label on every bar row when axis_labels is enabled."""
+    renderer = TerminalRenderer(
+        color_enabled=False,
+        show_axis_labels=True,
+        db_marker_style="all",
+        db_min=-20.0,
+        db_max=0.0,
+        db_interval=10.0,
+        graph_height=5,
+    )
+
+    frame = build_render_frame()
+    output = renderer.render(frame)
+
+    labeled_rows = [line for line in output.splitlines() if " dB +" in line]
+    assert len(labeled_rows) == 5
+
+
+# ---------------------------------------------------------------------------
+# m3: bisect-based _find_peak_row
+# ---------------------------------------------------------------------------
+
+
+def test_find_peak_row_returns_row_at_or_above_peak() -> None:
+    """_find_peak_row must return the threshold at or just above the peak level."""
+    renderer = TerminalRenderer(
+        color_enabled=False,
+        db_min=-80.0,
+        db_max=0.0,
+        db_interval=10.0,
+    )
+
+    # Peak exactly on a threshold — should return that threshold.
+    row_at = renderer._find_peak_row(-10.0)
+    assert row_at == pytest.approx(-10.0, abs=0.1)
+
+    # Peak between two thresholds — result must be above the peak.
+    row_above = renderer._find_peak_row(-5.5)
+    assert row_above >= -5.5
+
+
+def test_find_peak_row_index_and_find_peak_row_are_consistent() -> None:
+    """_find_peak_row_index must return the index of _find_peak_row's threshold."""
+    renderer = TerminalRenderer(
+        color_enabled=False,
+        db_min=-80.0,
+        db_max=0.0,
+        db_interval=10.0,
+    )
+
+    for peak_db in (-70.0, -40.0, -10.0, 0.0):
+        threshold = renderer._find_peak_row(peak_db)
+        index = renderer._find_peak_row_index(peak_db)
+        assert renderer._row_thresholds[index] == pytest.approx(threshold, abs=0.01)
+
+
+# ---------------------------------------------------------------------------
+# m10: bounded caches
+# ---------------------------------------------------------------------------
+
+
+def test_spectrum_processor_frame_cache_bounded() -> None:
+    """SpectrumProcessor._frame_size_cache must not exceed _FRAME_CACHE_MAX_SIZE."""
+    processor = SpectrumProcessor(sample_rate=44100, band_count=32)
+
+    for size in range(128, 128 + _FRAME_CACHE_MAX_SIZE + 4):
+        frame = AudioFrame(
+            samples=np.zeros(size, dtype=np.float64),
+            sample_rate=44100,
+        )
+        try:
+            processor.process_frame(frame)
+        except Exception:
+            pass
+
+    assert len(processor._frame_size_cache) <= _FRAME_CACHE_MAX_SIZE
+
+
+def test_renderer_layout_cache_bounded() -> None:
+    """TerminalRenderer._layout_cache must not exceed _LAYOUT_CACHE_MAX_SIZE."""
+    renderer = TerminalRenderer(color_enabled=False)
+
+    for band_count in range(8, 8 + _LAYOUT_CACHE_MAX_SIZE + 4):
+        freqs = tuple(build_log_frequency_centers(20.0, 20_000.0, band_count))
+        levels = tuple(0.0 for _ in freqs)
+        frame = RenderFrame(frequencies_hz=freqs, levels_db=levels)
+        renderer.render(frame)
+
+    assert len(renderer._layout_cache) <= _LAYOUT_CACHE_MAX_SIZE
