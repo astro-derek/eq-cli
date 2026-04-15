@@ -2,17 +2,13 @@
 
 Terminal-based real-time equalizer for live audio input.
 
-## Requirements
+## Installation
+
+### Requirements
 
 - Python 3.12 or newer
 - pip
 - A virtual environment for installation on macOS and most Linux distributions
-
-## Installation
-
-On macOS, Python installed via Homebrew is usually an externally managed
-environment. Installing with `pip install .` against the system interpreter can
-fail with `externally-managed-environment`. Use a virtual environment instead.
 
 ### Step 1. Create and activate a virtual environment
 
@@ -22,16 +18,14 @@ source .venv/bin/activate
 python -m pip install --upgrade pip
 ```
 
+On macOS, Python installed via Homebrew is usually an externally managed
+environment. Installing with `pip install .` against the system interpreter can
+fail with `externally-managed-environment`. Use a virtual environment instead.
+
 ### Step 2. Install the package
 
 ```sh
 python -m pip install .
-```
-
-For development, use an editable install instead:
-
-```sh
-python -m pip install -e .
 ```
 
 ### Step 3. Verify the install
@@ -39,62 +33,6 @@ python -m pip install -e .
 ```sh
 eq-cli --help
 ```
-
-## Release And Distribution
-
-The repository is configured to produce Python distribution artifacts from
-GitHub Actions.
-
-### CI validation
-
-Pushes and pull requests to `main` should run a CI workflow that:
-
-- runs `pytest`
-- runs `ruff`
-- runs `mypy`
-- runs `python -m build`
-
-This confirms that the repo is still capable of producing deployable Python
-artifacts.
-
-### Cut a release
-
-To create deployable artifacts for a release:
-
-1. Update the version in `pyproject.toml`.
-2. Commit the version bump on `main`.
-3. Create an annotated tag such as `v0.1.0`.
-4. Push the branch and tag.
-
-Example:
-
-```sh
-git checkout main
-git pull --ff-only origin main
-git add pyproject.toml
-git commit -m "release v0.1.1"
-git tag -a v0.1.1 -m "v0.1.1"
-git push origin main --tags
-```
-
-Current manual release trigger sequence:
-
-```sh
-git checkout main
-git pull --ff-only origin main
-# edit pyproject.toml version
-git add pyproject.toml README.md
-git commit -m "release v0.1.1"
-git tag -a v0.1.1 -m "v0.1.1"
-git push origin main --tags
-```
-
-This manual sequence is the current source of truth for releases and is a good
-candidate for future automation once the release flow has been exercised a few
-times.
-
-The release workflow builds `sdist` and `wheel` artifacts and attaches them to
-the corresponding GitHub Release.
 
 ## Usage
 
@@ -159,6 +97,32 @@ eq-cli --device <identifier-or-name> --block-size 2048
 `--block-size` overrides the auto-tuned audio callback size when you want more
 direct control over latency and stability.
 
+### Apply a gain offset
+
+```sh
+eq-cli --device <identifier-or-name> --gain 6
+```
+
+`--gain` applies an additive dB offset to all display levels without changing
+the underlying signal. Use it to shift the entire spectrum up or down when the
+input is very quiet or very hot.
+
+### Select volume mode
+
+```sh
+eq-cli --device <identifier-or-name> --volume-mode relative
+eq-cli --device <identifier-or-name> --volume-mode absolute
+```
+
+`--volume-mode` controls how the spectrum level is mapped to the dB scale:
+
+- `relative`: the loudest band is always stretched to fill the top of the range,
+  so the graph always looks active regardless of actual signal level. Good for
+  everyday monitoring.
+- `absolute`: levels are mapped directly to dB values, so the display falls quiet
+  when the signal is soft and shows the true effect of gain changes or filter
+  sweeps over time. Preferred for studio or diagnostic use.
+
 ### Save a one-shot chart snapshot
 
 ```sh
@@ -170,15 +134,28 @@ eq-cli --device <identifier-or-name> --snapshot-file snapshots/current.ansi --sn
 exits. Use `--snapshot-format txt` for plain text or `--snapshot-format ansi`
 to preserve terminal color codes.
 
-### Set a custom graph height
+### Set graph dimensions
 
 ```sh
 eq-cli --device <identifier-or-name> --graph-height 14
+eq-cli --device <identifier-or-name> --graph-width 140
 ```
 
 `--graph-height` controls the number of rendered spectrum rows. If omitted, the
-height is derived from the current dB scale. `--db-interval` controls dB label
-density on the vertical axis rather than the physical graph height.
+height is derived from the current dB scale. `--graph-width` sets the horizontal
+character width of the graph area (default: 120).
+
+### Set the dB display range
+
+```sh
+eq-cli --device <identifier-or-name> --db-min -60 --db-max 0
+eq-cli --device <identifier-or-name> --db-min -80 --db-max 6 --db-interval 6
+```
+
+`--db-min` sets the bottom of the dB scale (default: -80) and `--db-max` sets
+the top (default: 6); `--db-min` must be less than `--db-max`. `--db-interval`
+controls the row spacing in dB (default: 10); smaller intervals produce more
+rows and finer vertical resolution. The interval must be greater than zero.
 
 ### Enable axis labels (opt-in)
 
@@ -213,7 +190,18 @@ when that band is wide enough and there is a free row above the peak. Use
 ```sh
 eq-cli --device <identifier-or-name> --no-title --db-marker-style minimal
 eq-cli --device <identifier-or-name> --graph-height 12 --db-marker-style all
+eq-cli --device <identifier-or-name> --title-text "My Studio"
 ```
+
+`--db-marker-style` controls how many dB rows get a numeric label:
+
+- `all`: every row has a dB marker
+- `spaced`: markers appear at intervals (default)
+- `minimal`: only the most significant rows are labeled, reducing visual clutter
+
+`--title-text` overrides the centered title string shown at the top of the
+graph. The default title is `eq-cli v<version>`. Use `--no-title` to hide the
+title entirely.
 
 ### Configure peak hold behavior
 
@@ -254,15 +242,39 @@ low to high intensity.
 `--color-history` controls the color of history rows independently from live
 bar color.
 
+### Set frequency band gap
+
+```sh
+eq-cli --device <identifier-or-name> --band-gap 1
+```
+
+`--band-gap` inserts a separator of the given width (in characters) between
+labeled frequency regions, making the bands visually easier to distinguish.
+Default is 0 (no gap).
+
+### Customize bar and peak characters
+
+```sh
+eq-cli --device <identifier-or-name> --bar-char "="
+eq-cli --device <identifier-or-name> --peak-char "_"
+```
+
+`--bar-char` sets the character used to draw active spectrum bars (default:
+`#`). `--peak-char` sets the character used for peak markers (default: `-`).
+
 ### Use a named profile from a profile file
 
 ```sh
 eq-cli --device <identifier-or-name> --profile-file profiles/theme_profiles.json --profile studio
 ```
 
-Profile files can now carry both visual styling and runtime tuning values such
-as `gain`, `refresh_rate`, `block_size`, `axis_frequencies`, `snapshot_file`,
-`snapshot_format`, and `snapshot_dir`.
+Profile files carry both visual styling and runtime tuning values. Supported
+keys include: `gain`, `db_min`, `db_max`, `db_interval`, `refresh_rate`,
+`block_size`, `graph_height`, `graph_width`, `band_gap`, `axis_labels`,
+`axis_frequencies`, `bar_char`, `peak_char`, `peak_hold_frames`,
+`peak_db_labels`, `history_rows`, `history_gradient`, `show_shortcuts`,
+`title`, `title_text`, `volume_mode`, `channel_mode`, `db_marker_style`,
+`snapshot_file`, `snapshot_format`, `snapshot_dir`, and `colors`.
 
 ### Use a built-in profile directly
 
@@ -273,7 +285,7 @@ eq-cli --device <identifier-or-name> --profile studio
 Built-in profiles:
 
 - `default`: current standard layout and colors
-- `studio`: tall wide graph, no history rows, underscore peak markers, sparse dB markers, bright colors, `absolute` volume mode, `db_range=-76..0`, `peak_hold_frames=12`, runtime snapshots default to ANSI format in `snapshots/`
+- `studio`: tall wide graph, no history rows, underscore peak markers, minimal dB markers, bright colors, `absolute` volume mode, `db_min=-76`, `db_max=0`, `peak_hold_frames=12`, runtime snapshots default to ANSI format in `snapshots/`
 - `green-based`: green-focused profile with axis/labels/bars/history in green tones and `peak_hold_frames=6`
 - `minimal`: compact monochrome-style layout with minimal labeling
 - `high-contrast`: labels on, dense markers, strong contrast colors, `peak_hold_frames=4`
@@ -291,19 +303,12 @@ eq-cli --device <identifier-or-name> --profile high-contrast
 ### Studio recommendation
 
 For studio work such as checking the effect of a filter sweep on the audio
-signal, prefer `absolute` volume mode so boosts and cuts remain meaningful over
-time instead of being re-normalized every frame.
-
-Recommended command:
+signal, use `absolute` volume mode so boosts and cuts remain meaningful over
+time instead of being re-normalized every frame (see [Select volume mode](#select-volume-mode)).
+The built-in `studio` profile enables this automatically:
 
 ```sh
 eq-cli --device <identifier-or-name> --profile studio
-```
-
-Equivalent explicit command:
-
-```sh
-eq-cli --device <identifier-or-name> --profile studio --volume-mode absolute
 ```
 
 ### Override profile colors from CLI
@@ -374,18 +379,7 @@ eq-cli --device <identifier-or-name> --no-shortcuts
 | macOS    | Intended | PortAudio is bundled in the sounddevice wheel. |
 | Linux    | Intended | May require `apt install libportaudio2` or equivalent. |
 
-## Running tests
+## Contributing
 
-```sh
-python -m pip install -e . pytest
-python -m pytest
-```
-
-## Linting and type checking
-
-```sh
-python -m pip install -e . ruff mypy
-python -m ruff check .
-python -m mypy src
-```
+For development setup, testing, linting, and release instructions, see [DEVELOPER.md](DEVELOPER.md).
 
