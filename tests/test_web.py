@@ -220,7 +220,7 @@ def test_web_server_serves_index_html() -> None:
         assert 'id="cfg-title_text"' not in html
         assert "CFG.title_text" not in html
         assert "document.title = 'frequency-analyzer';" in html
-        assert "frequency-analyzer \\u25ae FROZEN" in html
+        assert r"frequency-analyzer \u25ae FROZEN" in html
         assert "function drawPeakDbLabels(peaks)" in html
         assert "drawPeakDbLabels(peaks);" in html
     finally:
