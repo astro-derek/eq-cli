@@ -15,7 +15,7 @@ import threading
 from pathlib import Path
 from typing import Any
 
-from eq_cli.loop import BAND_COUNT, RenderConfig
+from eq_cli.loop import RenderConfig
 
 _STATIC_DIR = Path(__file__).parent / "static"
 
@@ -116,7 +116,7 @@ def build_web_config(config: RenderConfig) -> dict[str, Any]:
         "db_max": config.db_max,
         "db_interval": config.db_interval,
         "graph_height": graph_height,
-        "band_count": BAND_COUNT,
+        "band_count": 128,
         "gain_db": config.gain_db,
         "volume_mode": config.volume_mode,
         "channel_mode": config.channel_mode,

@@ -95,15 +95,7 @@
     #start-card p  { color: #8b949e; font-size: 12px; margin-bottom: 16px; line-height: 1.5; }
     #btn-detect    { font-size: 12px; padding: 6px 18px; }
 
-    #helpbar {
-      font-size: 11px;
-      color: #484f58;
-      padding: 3px 10px;
-      background: #0d1117;
-      border-top: 1px solid #21262d;
-      flex-shrink: 0;
-      user-select: none;
-    }
+
   </style>
 </head>
 <body>
@@ -136,6 +128,16 @@
   </div>
   <div class="tb-sep"></div>
   <div class="tb-group">
+    <label for="sel-fft">FFT:</label>
+    <select id="sel-fft" title="FFT window size (higher = finer frequency resolution)">
+      <option value="1024">1024</option>
+      <option value="2048">2048</option>
+      <option value="4096" selected>4096</option>
+      <option value="8192">8192</option>
+    </select>
+  </div>
+  <div class="tb-sep"></div>
+  <div class="tb-group">
     <button id="btn-freeze" title="[F] Freeze display">Freeze</button>
     <button id="btn-reset"  title="[R] Reset peaks">Reset Peaks</button>
     <button id="btn-snap"   title="[S] Save PNG">&#128247; Snapshot</button>
@@ -153,8 +155,6 @@
     </div>
   </div>
 </div>
-
-<div id="helpbar">[F] Freeze &nbsp;&middot;&nbsp; [R] Reset Peaks &nbsp;&middot;&nbsp; [S] Snapshot</div>
 
 <script>
 'use strict';
@@ -321,7 +321,7 @@ function initLayout() {
   var LABEL_W  = CFG.show_axis_labels ? 66 : 6;
   var NOTCH_W  = CFG.show_axis_labels ?  2 : 0;
   var FREQ_AXH = 2;
-  var FREQ_LH  = CFG.show_axis_labels ? 44 : 0;
+  var FREQ_LH  = CFG.show_axis_labels ? 20 : 0;
   var HIST_RH  = 16;
   var histN    = Math.max(0, CFG.history_rows || 0);
   var SHORTC_H = 20;
@@ -422,7 +422,7 @@ function buildBandSpans() {
 function buildFreqMarkers() {
   freqMarkers = [];
   if (!CFG.show_axis_labels) { return; }
-  var defaults = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 15000, 20000];
+  var defaults = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
   var marks = (CFG.axis_frequencies && CFG.axis_frequencies.length)
     ? CFG.axis_frequencies : defaults;
   var minF = BAND_CENTERS[0], maxF = BAND_CENTERS[BAND_CENTERS.length - 1];
@@ -526,25 +526,22 @@ function drawFrame(levels, peaks, isFrozen) {
       ctx.fillRect(m.x, freqAxY - 3, 1, 5);
     });
 
-    // Two-pass staggered frequency labels to avoid overlap
+    // Single-row frequency labels with overlap suppression
     ctx.font = '10px Consolas,monospace';
     ctx.textBaseline = 'top';
     ctx.fillStyle = CFG.label_color;
     var placed = [];
-    for (var pass = 0; pass < 2; pass++) {
-      freqMarkers.forEach(function (m) {
-        var lw = ctx.measureText(m.label).width;
-        var lx = Math.max(barX, Math.min(barX + barW - lw, m.x - lw / 2));
-        var ly = freqLblY + pass * 16;
-        var overlaps = placed.some(function (p) {
-          return p[2] === ly && lx < p[0] + p[1] + 4 && lx + lw + 4 > p[0];
-        });
-        if (!overlaps) {
-          ctx.fillText(m.label, lx, ly);
-          placed.push([lx, lw, ly]);
-        }
+    freqMarkers.forEach(function (m) {
+      var lw = ctx.measureText(m.label).width;
+      var lx = Math.max(barX, Math.min(barX + barW - lw, m.x - lw / 2));
+      var overlaps = placed.some(function (p) {
+        return lx < p[0] + p[1] + 4 && lx + lw + 4 > p[0];
       });
-    }
+      if (!overlaps) {
+        ctx.fillText(m.label, lx, freqLblY);
+        placed.push([lx, lw]);
+      }
+    });
   }
 
   // History rows (opacity-scaled rectangles)
@@ -609,6 +606,10 @@ async function requestPermissionAndEnumerate() {
   }
 }
 
+function getFftSize() {
+  return parseInt(document.getElementById('sel-fft').value, 10) || 4096;
+}
+
 async function startAudio(deviceId) {
   stopAudio();
   try {
@@ -627,7 +628,7 @@ async function startAudio(deviceId) {
     });
     var source = audioCtx.createMediaStreamSource(mediaStream);
     analyserNode = audioCtx.createAnalyser();
-    analyserNode.fftSize = 4096;
+    analyserNode.fftSize = getFftSize();
     analyserNode.smoothingTimeConstant = 0;
     analyserNode.minDecibels = -120;
     analyserNode.maxDecibels = 0;
@@ -725,6 +726,10 @@ document.getElementById('btn-start').addEventListener('click', async function ()
 });
 
 document.getElementById('btn-stop').addEventListener('click', stopAudio);
+
+document.getElementById('sel-fft').addEventListener('change', function () {
+  if (analyserNode) { analyserNode.fftSize = getFftSize(); }
+});
 
 document.getElementById('btn-freeze').addEventListener('click', function () {
   frozen = !frozen;
