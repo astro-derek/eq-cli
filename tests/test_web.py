@@ -217,6 +217,7 @@ def test_web_server_serves_index_html() -> None:
         assert 'id="cfg-volume_mode"' in html
         assert 'id="cfg-channel_mode"' in html
         assert 'id="cfg-fft_size"' in html
+        assert 'id="cfg-graph_style"' in html
         assert 'id="cfg-history_fps"' in html
         assert 'id="cfg-title_text"' not in html
         assert "CFG.title_text" not in html
@@ -383,6 +384,35 @@ def test_web_index_frequency_axis_alignment_and_label_anchor() -> None:
             html = resp.read().decode()
         assert "ctx.fillRect(barX - 1, freqAxY, barW + 1, 1);" in html
         assert "ctx.textAlign = 'left';" in html
+    finally:
+        server.stop()
+
+
+def test_web_index_supports_filled_and_line_graph_modes() -> None:
+    """Settings and renderer should support both filled bars and line graph modes."""
+    server = WebServer("127.0.0.1", 0, build_web_config(RenderConfig()))
+    server.start()
+    try:
+        with urllib.request.urlopen(f"{server.url}") as resp:
+            html = resp.read().decode()
+        assert '<label for="cfg-graph_style">Graph style</label>' in html
+        assert '<option value="filled">Filled bars</option>' in html
+        assert '<option value="line">Line graph</option>' in html
+        assert "if ((CFG.graph_style || 'filled') === 'line') {" in html
+    finally:
+        server.stop()
+
+
+def test_web_index_uses_consistent_band_span_width_formula() -> None:
+    """Band spans should use one width step for all bars across the graph."""
+    server = WebServer("127.0.0.1", 0, build_web_config(RenderConfig()))
+    server.start()
+    try:
+        with urllib.request.urlopen(f"{server.url}") as resp:
+            html = resp.read().decode()
+        assert "var step = W / count;" in html
+        assert "bandSpans.push({ x: L.barX + i * step, w: Math.max(1, step) });" in html
+        assert "var x0 = Math.round(i * W / count);" not in html
     finally:
         server.stop()
 

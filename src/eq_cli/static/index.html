@@ -359,6 +359,7 @@ var CFG = {
   db_min: -80, db_max: 6, db_interval: 10, graph_height: 10,
   band_count: 64, gain_db: 0, volume_mode: 'relative', channel_mode: 'sum',
   fft_size: 4096, history_fps: DEFAULT_HISTORY_FPS,
+  graph_style: 'filled',
   bar_color: '#44cccc', peak_color: '#cc4444',
   history_color: '#44cccc', axis_color: '#666666', label_color: '#aaaaaa',
   show_title: true,
@@ -426,7 +427,7 @@ function openSettings() {
   var gainEl = document.getElementById('cfg-gain_db');
   if (gainEl) { gainEl.value = String(CFG.gain_db !== undefined ? CFG.gain_db : 0); }
 
-  var strKeys = ['db_marker_style', 'history_gradient'];
+  var strKeys = ['db_marker_style', 'history_gradient', 'graph_style'];
   strKeys.forEach(function (k) {
     var el = document.getElementById('cfg-' + k);
     if (el) { el.value = CFG[k] !== undefined ? CFG[k] : ''; }
@@ -520,7 +521,7 @@ function applySettings() {
   }
 
   ['bar_color', 'peak_color', 'history_color', 'axis_color', 'label_color',
-   'db_marker_style', 'history_gradient'].forEach(function (k) {
+   'db_marker_style', 'history_gradient', 'graph_style'].forEach(function (k) {
     var el = document.getElementById('cfg-' + k);
     if (el) { CFG[k] = el.value; }
   });
@@ -803,13 +804,13 @@ function buildDbLabelRows() {
 }
 
 function buildBandSpans() {
-  // Equal-pixel division of the bar area, matching the terminal renderer.
+  // Use a fixed span width across all bars to keep visual bar widths consistent.
   bandSpans = [];
   var W = L.barW, count = CFG.band_count;
+  if (count <= 0) { return; }
+  var step = W / count;
   for (var i = 0; i < count; i++) {
-    var x0 = Math.round(i * W / count);
-    var x1 = Math.round((i + 1) * W / count);
-    bandSpans.push({ x: L.barX + x0, w: Math.max(1, x1 - x0) });
+    bandSpans.push({ x: L.barX + i * step, w: Math.max(1, step) });
   }
 }
 
@@ -916,15 +917,31 @@ function drawFrame(levels, peaks, isFrozen) {
   ctx.fillStyle = CFG.axis_color;
   ctx.fillRect(barX - 1, barY, 1, barH + L.freqAxH);
 
-  // Bars
-  ctx.fillStyle = CFG.bar_color;
-  for (var i = 0; i < levels.length; i++) {
-    var db = levels[i];
-    if (db <= CFG.db_min) { continue; }
-    var sp = bandSpans[i];
-    var top = dbToY(db);
-    var ht = barY + barH - top;
-    if (ht > 0) { ctx.fillRect(sp.x, top, sp.w, ht); }
+  // Spectrum trace
+  if ((CFG.graph_style || 'filled') === 'line') {
+    if (levels.length > 0) {
+      ctx.strokeStyle = CFG.bar_color;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      for (var i = 0; i < levels.length; i++) {
+        var sp = bandSpans[i];
+        var db = Math.max(CFG.db_min, levels[i]);
+        var x = sp.x + sp.w / 2;
+        var y = dbToY(db);
+        if (i === 0) { ctx.moveTo(x, y); } else { ctx.lineTo(x, y); }
+      }
+      ctx.stroke();
+    }
+  } else {
+    ctx.fillStyle = CFG.bar_color;
+    for (var j = 0; j < levels.length; j++) {
+      var bdb = levels[j];
+      if (bdb <= CFG.db_min) { continue; }
+      var bsp = bandSpans[j];
+      var top = dbToY(bdb);
+      var ht = barY + barH - top;
+      if (ht > 0) { ctx.fillRect(bsp.x, top, bsp.w, ht); }
+    }
   }
 
   // Peak markers (1px horizontal stroke per band)
@@ -1301,6 +1318,13 @@ window.addEventListener('DOMContentLoaded', function () {
         </select>
       </div>
       <div class="settings-row"><label for="cfg-band_count">Band count</label><input type="number" id="cfg-band_count" step="1" min="16" max="256"></div>
+      <div class="settings-row">
+        <label for="cfg-graph_style">Graph style</label>
+        <select id="cfg-graph_style">
+          <option value="filled">Filled bars</option>
+          <option value="line">Line graph</option>
+        </select>
+      </div>
       <div class="settings-row"><label for="cfg-gain_db">Gain (dB)</label><input type="number" id="cfg-gain_db" step="0.5"></div>
       <div class="settings-row"><label for="cfg-band_gap">Band gap (px)</label><input type="number" id="cfg-band_gap" step="1" min="0"></div>
       <div class="settings-row"><label for="cfg-peak_hold_frames">Peak hold (frames)</label><input type="number" id="cfg-peak_hold_frames" step="1" min="0"></div>
