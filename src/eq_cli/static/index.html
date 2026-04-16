@@ -934,13 +934,13 @@ function drawFrame(levels, peaks, isFrozen) {
     }
   } else {
     ctx.fillStyle = CFG.bar_color;
-    for (var j = 0; j < levels.length; j++) {
-      var bdb = levels[j];
-      if (bdb <= CFG.db_min) { continue; }
-      var bsp = bandSpans[j];
-      var top = dbToY(bdb);
+    for (var barIndex = 0; barIndex < levels.length; barIndex++) {
+      var barDb = levels[barIndex];
+      if (barDb <= CFG.db_min) { continue; }
+      var barSpan = bandSpans[barIndex];
+      var top = dbToY(barDb);
       var ht = barY + barH - top;
-      if (ht > 0) { ctx.fillRect(bsp.x, top, bsp.w, ht); }
+      if (ht > 0) { ctx.fillRect(barSpan.x, top, barSpan.w, ht); }
     }
   }
 

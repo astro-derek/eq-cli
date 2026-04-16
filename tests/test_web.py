@@ -388,7 +388,7 @@ def test_web_index_frequency_axis_alignment_and_label_anchor() -> None:
         server.stop()
 
 
-def test_web_index_supports_filled_and_line_graph_modes() -> None:
+def test_web_index_includes_graph_style_options() -> None:
     """Settings and renderer should support both filled bars and line graph modes."""
     server = WebServer("127.0.0.1", 0, build_web_config(RenderConfig()))
     server.start()
@@ -403,13 +403,14 @@ def test_web_index_supports_filled_and_line_graph_modes() -> None:
         server.stop()
 
 
-def test_web_index_uses_consistent_band_span_width_formula() -> None:
+def test_web_index_uses_fixed_step_band_widths() -> None:
     """Band spans should use one width step for all bars across the graph."""
     server = WebServer("127.0.0.1", 0, build_web_config(RenderConfig()))
     server.start()
     try:
         with urllib.request.urlopen(f"{server.url}") as resp:
             html = resp.read().decode()
+        assert "if (count <= 0) { return; }" in html
         assert "var step = W / count;" in html
         assert "bandSpans.push({ x: L.barX + i * step, w: Math.max(1, step) });" in html
         assert "var x0 = Math.round(i * W / count);" not in html
