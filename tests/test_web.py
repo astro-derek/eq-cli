@@ -59,7 +59,7 @@ def test_build_web_config_has_required_keys() -> None:
         "db_min", "db_max", "db_interval", "graph_height", "band_count",
         "gain_db", "volume_mode", "channel_mode",
         "bar_color", "peak_color", "history_color", "axis_color", "label_color",
-        "show_title", "title_text", "show_axis_labels", "show_shortcuts",
+        "show_title", "show_axis_labels", "show_shortcuts",
         "db_marker_style", "history_rows", "peak_hold_frames",
         "app_version", "profile_presets",
     }
@@ -93,10 +93,10 @@ def test_build_web_config_preserves_explicit_graph_height() -> None:
     assert cfg["graph_height"] == 20
 
 
-def test_build_web_config_defaults_title_text() -> None:
-    """Default web title should match the frequency analyzer branding."""
+def test_build_web_config_omits_title_text() -> None:
+    """Web config should not expose title text as a user setting."""
     cfg = build_web_config(RenderConfig())
-    assert cfg["title_text"] == "frequency-analyzer"
+    assert "title_text" not in cfg
 
 
 def test_build_web_config_passthrough_scalars() -> None:
@@ -217,6 +217,8 @@ def test_web_server_serves_index_html() -> None:
         assert 'id="cfg-channel_mode"' in html
         assert 'id="cfg-fft_size"' in html
         assert 'id="cfg-history_fps"' in html
+        assert 'id="cfg-title_text"' not in html
+        assert "CFG.title_text" not in html
         assert "function drawPeakDbLabels(peaks)" in html
         assert "drawPeakDbLabels(peaks);" in html
     finally:

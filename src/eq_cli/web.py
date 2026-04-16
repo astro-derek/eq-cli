@@ -188,7 +188,6 @@ def build_web_config(config: RenderConfig) -> dict[str, Any]:
         "axis_color": ansi_to_css(config.axis_color_code),
         "label_color": ansi_to_css(config.label_color_code),
         "show_title": config.show_title,
-        "title_text": config.title_text or "frequency-analyzer",
         "show_axis_labels": config.show_axis_labels,
         "show_shortcuts": config.show_shortcuts,
         "db_marker_style": config.db_marker_style,
