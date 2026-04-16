@@ -132,6 +132,7 @@ def test_build_web_config_exposes_profile_presets() -> None:
     cfg = build_web_config(RenderConfig())
     presets = cfg["profile_presets"]
     assert isinstance(presets, dict)
+    assert {"studio", "default", "green-based", "minimal"} <= set(presets)
     assert "studio" in presets
     assert "bar_color" in presets["studio"]
     assert "peak_color" in presets["studio"]
@@ -204,7 +205,11 @@ def test_web_server_serves_index_html() -> None:
         assert "eq-cli" in html
         assert 'id="version-badge"' in html
         assert 'id="repo-link"' in html
-        assert 'id="cfg-profile-preset"' in html
+        assert 'id="sel-profile"' in html
+        assert 'id="cfg-volume_mode"' in html
+        assert 'id="cfg-channel_mode"' in html
+        assert 'id="cfg-fft_size"' in html
+        assert 'id="cfg-history_fps"' in html
     finally:
         server.stop()
 
