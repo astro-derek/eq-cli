@@ -1162,8 +1162,9 @@ function renderTick() {
 
 // ── UI wiring ─────────────────────────────────────────────────────────────────
 /**
- * Update the runtime status text displayed in the chart title row.
+ * Update the runtime status text used by the chart title row.
  * @param {string} msg Status text for the current analyzer state.
+ * The new value is rendered on the next animation frame.
  */
 function setRuntimeStatusMessage(msg) {
   runtimeStatusMessage = msg;

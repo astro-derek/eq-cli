@@ -258,9 +258,13 @@ def test_web_server_serves_index_html() -> None:
         assert "if (isFrozen) { titleStr += ' \\u25ae FROZEN'; }" in html
         assert "function drawPeakDbLabels(peaks)" in html
         assert "drawPeakDbLabels(peaks);" in html
-        meta_idx = html.index('id="tb-meta"')
-        canvas_idx = html.index('<div id="canvas-container">')
-        meta_section = html[meta_idx:canvas_idx]
+        meta_match = re.search(
+            r'<div class="tb-group" id="tb-meta">(?P<section>.*?)</div>',
+            html,
+            flags=re.DOTALL,
+        )
+        assert meta_match is not None
+        meta_section = meta_match.group("section")
         assert 'id="repo-link"' in meta_section
         assert 'id="version-badge"' in meta_section
         assert meta_section.index('id="repo-link"') < meta_section.index(
