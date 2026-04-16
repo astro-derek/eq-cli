@@ -864,7 +864,7 @@ function drawFrame(levels, peaks, isFrozen) {
     ctx.textBaseline = 'middle';
     ctx.fillStyle = CFG.label_color;
     Object.keys(dbLabelRows).forEach(function (ri) {
-      var y = barY + Number(ri) * L.rowH + L.rowH / 2;
+      var y = dbToY(Number(dbLabelRows[ri]));
       ctx.fillText(dbLabelRows[ri] + ' dB', labelW - 2, y);
     });
   }
