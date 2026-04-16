@@ -898,7 +898,7 @@ function drawFrame(levels, peaks, isFrozen) {
 
   // Horizontal frequency axis line
   ctx.fillStyle = CFG.axis_color;
-  ctx.fillRect(barX, freqAxY, barW, 1);
+  ctx.fillRect(barX - 1, freqAxY, barW + 1, 1);
 
   if (CFG.show_axis_labels) {
     // Tick notches
@@ -909,6 +909,7 @@ function drawFrame(levels, peaks, isFrozen) {
 
     // Single-row frequency labels with overlap suppression
     ctx.font = '10px Consolas,monospace';
+    ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     ctx.fillStyle = CFG.label_color;
     var placed = [];
