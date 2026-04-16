@@ -228,6 +228,22 @@ def test_web_server_serves_index_html() -> None:
         assert 'id="cfg-history_fps"' in html
         assert 'id="cfg-title_text"' not in html
         assert "CFG.title_text" not in html
+        assert "<u>F</u>reeze" in html
+        assert "<u>R</u>eset Peaks" in html
+        assert "<u>S</u>napshot" in html
+        assert (
+            'id="btn-freeze" title="[F] Freeze display" '
+            'accesskey="f" aria-keyshortcuts="f"'
+        ) in html
+        assert (
+            'id="btn-reset" title="[R] Reset peaks" '
+            'accesskey="r" aria-keyshortcuts="r"'
+        ) in html
+        assert (
+            'id="btn-snap" title="[S] Save PNG" '
+            'accesskey="s" aria-keyshortcuts="s"'
+        ) in html
+        assert "[F] Freeze:" not in html
         assert "document.title = 'frequency-analyzer';" in html
         assert r"frequency-analyzer \u25ae FROZEN" in html
         assert "function drawPeakDbLabels(peaks)" in html

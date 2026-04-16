@@ -305,9 +305,9 @@
 
 <div id="footer">
   <div class="tb-group">
-    <button id="btn-freeze" title="[F] Freeze display">Freeze</button>
-    <button id="btn-reset" title="[R] Reset peaks">Reset Peaks</button>
-    <button id="btn-snap" title="[S] Save PNG">&#128247; Snapshot</button>
+    <button id="btn-freeze" title="[F] Freeze display" accesskey="f" aria-keyshortcuts="f"><u>F</u>reeze</button>
+    <button id="btn-reset" title="[R] Reset peaks" accesskey="r" aria-keyshortcuts="r"><u>R</u>eset Peaks</button>
+    <button id="btn-snap" title="[S] Save PNG" accesskey="s" aria-keyshortcuts="s">&#128247; <u>S</u>napshot</button>
   </div>
 </div>
 
@@ -733,7 +733,7 @@ function initLayout() {
   var FREQ_LH  = CFG.show_axis_labels ? 20 : 0;
   var HIST_RH  = 16;
   var histN    = Math.max(0, CFG.history_rows || 0);
-  var SHORTC_H = 20;
+  var SHORTC_H = 0;
 
   var barX = LABEL_W + NOTCH_W;
   var barY = TITLE_H;
@@ -1020,16 +1020,6 @@ function drawFrame(levels, peaks, isFrozen) {
     ctx.globalAlpha = 1.0;
   }
 
-  // Shortcuts bar
-  ctx.font = '10px Consolas,monospace';
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#484f58';
-  var fStr = isFrozen ? 'ON' : 'OFF';
-  ctx.fillText(
-    '[F] Freeze: ' + fStr + '  [R] Reset Peaks  [S] Snapshot',
-    barX + 4, shortY + 10
-  );
 }
 
 // ── Audio setup ───────────────────────────────────────────────────────────────
@@ -1173,6 +1163,19 @@ function setStatus(msg, cls) {
   el.className = cls || '';
 }
 
+function setFreezeButtonLabel(btn, isFrozen) {
+  var pauseIcon = '\u23f8 ';
+  btn.replaceChildren();
+  var labelText = isFrozen ? 'Frozen' : 'Freeze';
+  if (isFrozen) {
+    btn.append(document.createTextNode(pauseIcon));
+  }
+  var underlinedLetter = document.createElement('u');
+  underlinedLetter.textContent = labelText.charAt(0);
+  btn.append(underlinedLetter);
+  btn.append(document.createTextNode(labelText.slice(1)));
+}
+
 function wireUi() {
   document.getElementById('btn-detect').addEventListener('click', function () {
     requestPermissionAndEnumerate();
@@ -1192,7 +1195,7 @@ function wireUi() {
     frozen = !frozen;
     var btn = document.getElementById('btn-freeze');
     btn.classList.toggle('active', frozen);
-    btn.textContent = frozen ? '\u258e\u258e Frozen' : 'Freeze';
+    setFreezeButtonLabel(btn, frozen);
   });
 
   document.getElementById('btn-reset').addEventListener('click', resetPeaks);
