@@ -105,6 +105,8 @@ def _profile_color_to_css(color_name: str | None) -> str | None:
         The resolved CSS hex color string, or ``None`` when no color name is
         provided or the profile color resolves to ``None``.
     """
+    if color_name is None:
+        return None
     ansi_code = resolve_color_code(color_name)
     if ansi_code is None:
         return None

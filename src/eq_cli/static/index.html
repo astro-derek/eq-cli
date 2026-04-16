@@ -322,6 +322,8 @@
 'use strict';
 
 // ── Default config (overwritten from /config on load, then localStorage) ──────
+var UNKNOWN_VERSION = '0.0.0';
+
 var CFG = {
   db_min: -80, db_max: 6, db_interval: 10, graph_height: 10,
   band_count: 64, gain_db: 0, volume_mode: 'relative', channel_mode: 'sum',
@@ -1097,7 +1099,7 @@ function wireUi() {
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function init() {
   await loadConfig();
-  document.getElementById('version-badge').textContent = 'v' + (CFG.app_version || '0.0.0');
+  document.getElementById('version-badge').textContent = 'v' + (CFG.app_version || UNKNOWN_VERSION);
   rebuildBandGeometry();
   ensurePeakArrays();
 
