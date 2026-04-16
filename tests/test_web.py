@@ -301,6 +301,19 @@ def test_web_index_embeds_fallback_profile_presets() -> None:
         server.stop()
 
 
+def test_web_index_frequency_axis_alignment_and_label_anchor() -> None:
+    """Frequency-axis line and labels should align with the y-axis origin."""
+    server = WebServer("127.0.0.1", 0, build_web_config(RenderConfig()))
+    server.start()
+    try:
+        with urllib.request.urlopen(f"{server.url}") as resp:
+            html = resp.read().decode()
+        assert "ctx.fillRect(barX - 1, freqAxY, barW + 1, 1);" in html
+        assert "ctx.textAlign = 'left';" in html
+    finally:
+        server.stop()
+
+
 def test_web_server_serves_index_html_via_explicit_path() -> None:
     """Accessing /index.html explicitly should also serve the page."""
     server = WebServer("127.0.0.1", 0, build_web_config(RenderConfig()))
