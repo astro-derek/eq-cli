@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>eq-cli</title>
+  <title>frequency-analyzer</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -348,7 +348,7 @@ var CFG = {
   fft_size: 4096, history_fps: DEFAULT_HISTORY_FPS,
   bar_color: '#44cccc', peak_color: '#cc4444',
   history_color: '#44cccc', axis_color: '#666666', label_color: '#aaaaaa',
-  show_title: true, title_text: 'eq-cli',
+  show_title: true, title_text: 'frequency-analyzer',
   show_axis_labels: true, show_shortcuts: false,
   db_marker_style: 'spaced', history_rows: 0,
   history_gradient: ' .:-=+*#%@',
@@ -545,7 +545,7 @@ function applySettings() {
   historyLastPushMs = 0;
   if (analyserNode) { analyserNode.fftSize = getFftSize(); }
   initLayout();
-  document.title = CFG.title_text || 'eq-cli';
+  document.title = CFG.title_text || 'frequency-analyzer';
 }
 
 function resetSettingsToDefaults() {
@@ -1170,7 +1170,7 @@ async function init() {
   rebuildBandGeometry();
   ensurePeakArrays();
 
-  document.title = CFG.title_text || 'eq-cli';
+  document.title = CFG.title_text || 'frequency-analyzer';
   populateProfilePresets();
 
   initLayout();

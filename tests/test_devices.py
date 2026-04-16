@@ -545,3 +545,30 @@ def test_main_mode_allows_explicit_cli_overrides(
     assert exit_code == 0
     assert captured["volume_mode"] == "relative"
     assert captured["channel_mode"] == "left"
+
+
+def test_main_web_mode_uses_frequency_analyzer_title_by_default(
+    fake_provider: FakeAudioInputDeviceProvider,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Web mode should leave title unset so web defaults can apply consistently."""
+    captured: dict[str, object] = {}
+
+    def _fake_run_equalizer_web(
+        config: RenderConfig,
+        web_host: str,
+        web_port: int,
+        open_browser: bool,
+    ) -> int:
+        captured["title_text"] = config.title_text
+        captured["web_host"] = web_host
+        captured["web_port"] = web_port
+        captured["open_browser"] = open_browser
+        return 0
+
+    monkeypatch.setattr("eq_cli.web_loop.run_equalizer_web", _fake_run_equalizer_web)
+
+    exit_code = main(["--ui", "web"], device_provider=fake_provider)
+
+    assert exit_code == 0
+    assert captured["title_text"] is None

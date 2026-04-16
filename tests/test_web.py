@@ -93,6 +93,12 @@ def test_build_web_config_preserves_explicit_graph_height() -> None:
     assert cfg["graph_height"] == 20
 
 
+def test_build_web_config_defaults_title_text() -> None:
+    """Default web title should match the frequency analyzer branding."""
+    cfg = build_web_config(RenderConfig())
+    assert cfg["title_text"] == "frequency-analyzer"
+
+
 def test_build_web_config_passthrough_scalars() -> None:
     """Scalar display fields should be forwarded unchanged."""
     cfg = build_web_config(
@@ -201,7 +207,7 @@ def test_web_server_serves_index_html() -> None:
         with urllib.request.urlopen(f"{server.url}") as resp:
             html = resp.read().decode()
         assert "<canvas" in html
-        assert "eq-cli" in html
+        assert "<title>frequency-analyzer</title>" in html
         assert 'id="version-badge"' in html
         assert 'id="repo-link"' in html
         assert 'id="sel-profile"' in html

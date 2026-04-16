@@ -747,7 +747,7 @@ def main(
                     show_shortcuts=args.show_shortcuts,
                     show_axis_labels=args.axis_labels,
                     show_title=args.title,
-                    title_text=args.title_text or f"{app.name} v{app.version}",
+                    title_text=args.title_text,
                     db_marker_style=args.db_marker_style,
                     bar_color_code=resolve_color_code(args.color_bar) or "\x1b[36m",
                     peak_color_code=resolve_color_code(args.color_peak) or "\x1b[31m",
