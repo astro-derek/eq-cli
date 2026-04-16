@@ -1134,13 +1134,14 @@ function setStatus(msg, cls) {
 
 function setFreezeButtonLabel(btn, isFrozen) {
   btn.replaceChildren();
+  var labelText = isFrozen ? 'Frozen' : 'Freeze';
   if (isFrozen) {
-    btn.append(document.createTextNode('\u258e\u258e '));
+    btn.append(document.createTextNode('\u23f8 '));
   }
   var key = document.createElement('u');
-  key.textContent = 'F';
+  key.textContent = labelText.charAt(0);
   btn.append(key);
-  btn.append(document.createTextNode(isFrozen ? 'rozen' : 'reeze'));
+  btn.append(document.createTextNode(labelText.slice(1)));
 }
 
 function wireUi() {
