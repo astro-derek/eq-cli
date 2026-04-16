@@ -47,10 +47,22 @@ jobs:
           print(match.group(1))
           PY
           )
-          mkdir -p /tmp/eq-cli-static
-          cp -R src/eq_cli/static/. /tmp/eq-cli-static/
-          sed -i "s/__EQ_CLI_VERSION__/${VERSION}/g" /tmp/eq-cli-static/index.html
-          aws s3 sync /tmp/eq-cli-static/ s3://${{ secrets.S3_BUCKET_NAME }}/ \
+          STATIC_BUILD_DIR=$(mktemp -d)
+          export VERSION
+          export STATIC_BUILD_DIR
+          cp -R src/eq_cli/static/. "${STATIC_BUILD_DIR}/"
+          python - <<'PY'
+          from pathlib import Path
+          import os
+
+          build_dir = Path(os.environ["STATIC_BUILD_DIR"])
+          version = os.environ["VERSION"]
+          index_path = build_dir / "index.html"
+          index_path.write_text(
+              index_path.read_text().replace("__EQ_CLI_VERSION__", version)
+          )
+          PY
+          aws s3 sync "${STATIC_BUILD_DIR}/" s3://${{ secrets.S3_BUCKET_NAME }}/ \
             --delete \
             --cache-control "public,max-age=3600,s-maxage=86400"
 
