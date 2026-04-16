@@ -257,6 +257,7 @@ def test_web_index_positions_db_labels_from_db_values() -> None:
         with urllib.request.urlopen(f"{server.url}") as resp:
             html = resp.read().decode()
         assert "var y = dbToY(Number(dbLabelRows[ri]));" in html
+        assert "var y = barY + Number(ri) * L.rowH + L.rowH / 2;" not in html
     finally:
         server.stop()
 
