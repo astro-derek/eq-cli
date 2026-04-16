@@ -15,7 +15,9 @@ def test_list_builtin_profiles_exposes_expected_presets() -> None:
         "green-based",
         "high-contrast",
         "minimal",
+        "neon-night",
         "studio",
+        "sunset-drive",
     )
 
 
@@ -47,6 +49,24 @@ def test_load_profile_reads_green_based_builtin_profile() -> None:
     assert profile["title_text"] == "eq-cli green-based"
     assert profile["colors"]["bar"] == "green"
     assert profile["colors"]["history"] == "bright_green"
+
+
+def test_load_profile_reads_neon_night_builtin_profile() -> None:
+    """Neon-night profile should expose colorful high-contrast settings."""
+    profile = load_profile(None, "neon-night")
+
+    assert profile["title_text"] == "eq-cli neon-night"
+    assert profile["colors"]["bar"] == "bright_cyan"
+    assert profile["colors"]["peak"] == "bright_yellow"
+
+
+def test_load_profile_reads_sunset_drive_builtin_profile() -> None:
+    """Sunset-drive profile should expose warm retro-themed color settings."""
+    profile = load_profile(None, "sunset-drive")
+
+    assert profile["title_text"] == "eq-cli sunset-drive"
+    assert profile["colors"]["bar"] == "bright_magenta"
+    assert profile["colors"]["history"] == "bright_cyan"
 
 
 def test_load_profile_reads_named_profile(tmp_path: Path) -> None:

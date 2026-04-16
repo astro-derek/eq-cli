@@ -139,7 +139,14 @@ def test_build_web_config_exposes_profile_presets() -> None:
     cfg = build_web_config(RenderConfig())
     presets = cfg["profile_presets"]
     assert isinstance(presets, dict)
-    assert {"studio", "default", "green-based", "minimal"} <= set(presets)
+    assert {
+        "studio",
+        "default",
+        "green-based",
+        "minimal",
+        "neon-night",
+        "sunset-drive",
+    } <= set(presets)
     assert "bar_color" in presets["studio"]
     assert "peak_color" in presets["studio"]
 
@@ -335,7 +342,9 @@ def test_web_index_embeds_fallback_profile_presets() -> None:
         assert "'green-based': {" in html
         assert "'high-contrast': {" in html
         assert "'minimal': {" in html
+        assert "'neon-night': {" in html
         assert "'studio': {" in html
+        assert "'sunset-drive': {" in html
 
         # default profile
         assert "bar_color: '#44cccc'" in html
@@ -371,6 +380,20 @@ def test_web_index_embeds_fallback_profile_presets() -> None:
         assert "history_color: '#44cc44'" in html
         assert "axis_color: '#777777'" in html
         assert "label_color: '#ffffff'" in html
+
+        # neon-night profile
+        assert "bar_color: '#66ffff'" in html
+        assert "peak_color: '#ffff66'" in html
+        assert "history_color: '#ff66ff'" in html
+        assert "axis_color: '#6666ff'" in html
+        assert "label_color: '#ff66ff'" in html
+
+        # sunset-drive profile
+        assert "bar_color: '#ff66ff'" in html
+        assert "peak_color: '#ff6666'" in html
+        assert "history_color: '#66ffff'" in html
+        assert "axis_color: '#777777'" in html
+        assert "label_color: '#ffff66'" in html
     finally:
         server.stop()
 

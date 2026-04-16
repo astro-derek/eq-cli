@@ -289,6 +289,8 @@ Built-in profiles:
 - `green-based`: green-focused profile with axis/labels/bars/history in green tones and `peak_hold_frames=6`
 - `minimal`: compact monochrome-style layout with minimal labeling
 - `high-contrast`: labels on, dense markers, strong contrast colors, `peak_hold_frames=4`
+- `neon-night`: vivid cyan/magenta/yellow palette with extra peak hold and history rows
+- `sunset-drive`: warm retro palette with magenta bars, red peaks, and cyan history
 
 Example invocations:
 
@@ -298,6 +300,8 @@ eq-cli --device <identifier-or-name> --profile studio
 eq-cli --device <identifier-or-name> --profile green-based
 eq-cli --device <identifier-or-name> --profile minimal
 eq-cli --device <identifier-or-name> --profile high-contrast
+eq-cli --device <identifier-or-name> --profile neon-night
+eq-cli --device <identifier-or-name> --profile sunset-drive
 ```
 
 ### Studio recommendation
@@ -442,4 +446,3 @@ eq-cli --ui web --db-min -60 --db-max 0 --history-rows 4
 ## Contributing
 
 For development setup, testing, linting, and release instructions, see [DEVELOPER.md](DEVELOPER.md).
-
