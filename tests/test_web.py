@@ -93,7 +93,7 @@ def test_build_web_config_preserves_explicit_graph_height() -> None:
     assert cfg["graph_height"] == 20
 
 
-def test_build_web_config_omits_title_text() -> None:
+def test_build_web_config_excludes_title_text() -> None:
     """Web config should not expose title text as a user setting."""
     cfg = build_web_config(RenderConfig())
     assert "title_text" not in cfg

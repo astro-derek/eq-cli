@@ -426,8 +426,8 @@ function openSettings() {
   var gainEl = document.getElementById('cfg-gain_db');
   if (gainEl) { gainEl.value = String(CFG.gain_db !== undefined ? CFG.gain_db : 0); }
 
-  var strKeys = ['db_marker_style', 'history_gradient'];
-  strKeys.forEach(function (k) {
+  var stringConfigKeys = ['db_marker_style', 'history_gradient'];
+  stringConfigKeys.forEach(function (k) {
     var el = document.getElementById('cfg-' + k);
     if (el) { el.value = CFG[k] !== undefined ? CFG[k] : ''; }
   });
