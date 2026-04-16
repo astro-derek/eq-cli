@@ -403,7 +403,7 @@ def test_web_index_includes_graph_style_setting() -> None:
         server.stop()
 
 
-def test_web_band_span_calculation_uses_fixed_step() -> None:
+def test_web_band_span_uses_consistent_width_step() -> None:
     """Band spans should use one width step for all bars across the graph."""
     server = WebServer("127.0.0.1", 0, build_web_config(RenderConfig()))
     server.start()
