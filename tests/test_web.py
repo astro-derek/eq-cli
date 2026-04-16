@@ -226,6 +226,12 @@ def test_web_server_serves_index_html() -> None:
         assert 'id="btn-freeze" title="[F] Freeze display" accesskey="f"' in html
         assert 'id="btn-reset" title="[R] Reset peaks" accesskey="r"' in html
         assert 'id="btn-snap" title="[S] Save PNG" accesskey="s"' in html
+        assert 'id="btn-freeze" title="[F] Freeze display"' in html
+        assert 'accesskey="f" aria-keyshortcuts="f"' in html
+        assert 'id="btn-reset" title="[R] Reset peaks"' in html
+        assert 'accesskey="r" aria-keyshortcuts="r"' in html
+        assert 'id="btn-snap" title="[S] Save PNG"' in html
+        assert 'accesskey="s" aria-keyshortcuts="s"' in html
         assert "[F] Freeze:" not in html
         assert "document.title = 'frequency-analyzer';" in html
         assert r"frequency-analyzer \u25ae FROZEN" in html

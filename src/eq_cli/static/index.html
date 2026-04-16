@@ -1133,10 +1133,11 @@ function setStatus(msg, cls) {
 }
 
 function setFreezeButtonLabel(btn, isFrozen) {
+  var pauseIcon = '\u23f8 ';
   btn.replaceChildren();
   var labelText = isFrozen ? 'Frozen' : 'Freeze';
   if (isFrozen) {
-    btn.append(document.createTextNode('\u23f8 '));
+    btn.append(document.createTextNode(pauseIcon));
   }
   var shortcutElement = document.createElement('u');
   shortcutElement.textContent = labelText.charAt(0);
