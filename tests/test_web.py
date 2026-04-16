@@ -235,6 +235,20 @@ def test_web_index_defers_boot_until_dom_ready() -> None:
         server.stop()
 
 
+def test_web_index_does_not_persist_server_managed_profile_fields() -> None:
+    """Browser-saved settings must not overwrite server-managed profile presets."""
+    server = WebServer("127.0.0.1", 0, build_web_config(RenderConfig()))
+    server.start()
+    try:
+        with urllib.request.urlopen(f"{server.url}") as resp:
+            html = resp.read().decode()
+        assert "function _persistableSettings(source)" in html
+        assert "delete settings.profile_presets;" in html
+        assert "delete settings.app_version;" in html
+    finally:
+        server.stop()
+
+
 def test_web_server_serves_index_html_via_explicit_path() -> None:
     """Accessing /index.html explicitly should also serve the page."""
     server = WebServer("127.0.0.1", 0, build_web_config(RenderConfig()))

@@ -334,15 +334,28 @@ async function loadConfig() {
 }
 
 // ── localStorage settings helpers ─────────────────────────────────────────────
+function _persistableSettings(source) {
+  if (!source || typeof source !== 'object') { return null; }
+  var settings = Object.assign({}, source);
+  delete settings.app_version;
+  delete settings.profile_presets;
+  return settings;
+}
+
 function _loadLocalSettings() {
   try {
     var raw = localStorage.getItem('eq-cli-settings');
-    return raw ? JSON.parse(raw) : null;
+    if (!raw) { return null; }
+    return _persistableSettings(JSON.parse(raw));
   } catch (e) { return null; }
 }
 
 function _saveLocalSettings() {
-  try { localStorage.setItem('eq-cli-settings', JSON.stringify(CFG)); } catch (e) {}
+  try {
+    var persisted = _persistableSettings(CFG);
+    if (!persisted) { return; }
+    localStorage.setItem('eq-cli-settings', JSON.stringify(persisted));
+  } catch (e) {}
 }
 
 // ── Settings panel ────────────────────────────────────────────────────────────
