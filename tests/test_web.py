@@ -291,6 +291,19 @@ def test_web_index_does_not_persist_server_managed_profile_fields() -> None:
         server.stop()
 
 
+def test_web_index_positions_db_labels_from_db_values() -> None:
+    """dB labels should be positioned from their dB values, not row centers."""
+    server = WebServer("127.0.0.1", 0, build_web_config(RenderConfig()))
+    server.start()
+    try:
+        with urllib.request.urlopen(f"{server.url}") as resp:
+            html = resp.read().decode()
+        assert "var y = dbToY(Number(dbLabelRows[ri]));" in html
+        assert "var y = barY + Number(ri) * L.rowH + L.rowH / 2;" not in html
+    finally:
+        server.stop()
+
+
 def test_web_index_embeds_fallback_profile_presets() -> None:
     """Static page should include fallback built-in profile presets."""
     server = WebServer("127.0.0.1", 0, build_web_config(RenderConfig()))
