@@ -464,6 +464,49 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="COLOR",
         help="History color name or ANSI code (e.g., yellow or 33).",
     )
+    web_group = parser.add_argument_group("web UI options")
+    web_group.add_argument(
+        "--ui",
+        choices=["terminal", "web"],
+        default="terminal",
+        dest="ui",
+        help=(
+            "User interface mode: terminal (default) renders in the current "
+            "shell; web opens a local browser page that captures audio via "
+            "the browser's Web Audio API without requiring a device selection."
+        ),
+    )
+    web_group.add_argument(
+        "--web-host",
+        default="127.0.0.1",
+        dest="web_host",
+        metavar="HOST",
+        help=(
+            "Interface address to bind the web server to (default: 127.0.0.1). "
+            "Only used when --ui web is specified."
+        ),
+    )
+    web_group.add_argument(
+        "--web-port",
+        type=int,
+        default=8080,
+        dest="web_port",
+        metavar="PORT",
+        help=(
+            "TCP port for the web server (default: 8080). "
+            "Only used when --ui web is specified."
+        ),
+    )
+    web_group.add_argument(
+        "--open-browser",
+        action="store_true",
+        default=False,
+        dest="open_browser",
+        help=(
+            "Open the default system browser automatically when starting web "
+            "mode.  Only used when --ui web is specified."
+        ),
+    )
     return parser
 
 
@@ -678,6 +721,44 @@ def main(
     try:
         args = _apply_mode_defaults(args, parsed_argv)
         args = _merge_profile_settings(args, parsed_argv)
+
+        # Web mode: audio runs in the browser; no device selection is needed.
+        if args.ui == "web":
+            from eq_cli.web_loop import run_equalizer_web
+
+            return run_equalizer_web(
+                config=RenderConfig(
+                    gain_db=args.gain,
+                    db_min=args.db_min,
+                    db_max=args.db_max,
+                    db_interval=args.db_interval,
+                    graph_height=args.graph_height,
+                    volume_mode=args.volume_mode,
+                    channel_mode=args.channel_mode,
+                    graph_width=args.graph_width,
+                    band_gap=args.band_gap,
+                    axis_frequencies=args.axis_frequencies,
+                    bar_char=args.bar_char,
+                    peak_char=args.peak_char,
+                    peak_db_labels=args.peak_db_labels,
+                    peak_hold_frames=args.peak_hold_frames,
+                    history_rows=args.history_rows,
+                    history_gradient=args.history_gradient,
+                    show_shortcuts=args.show_shortcuts,
+                    show_axis_labels=args.axis_labels,
+                    show_title=args.title,
+                    title_text=args.title_text or f"{app.name} v{app.version}",
+                    db_marker_style=args.db_marker_style,
+                    bar_color_code=resolve_color_code(args.color_bar) or "\x1b[36m",
+                    peak_color_code=resolve_color_code(args.color_peak) or "\x1b[31m",
+                    history_color_code=resolve_color_code(args.color_history),
+                    axis_color_code=resolve_color_code(args.color_axis),
+                    label_color_code=resolve_color_code(args.color_label),
+                ),
+                web_host=args.web_host,
+                web_port=args.web_port,
+                open_browser=args.open_browser,
+            )
 
         devices = provider.list_input_devices()
         if args.list_devices:
