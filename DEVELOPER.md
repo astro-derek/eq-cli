@@ -83,10 +83,14 @@ VERSION=$(python - <<'PY'
 from pathlib import Path
 import re
 
-match = re.search(r'(?m)^version = "([^"]+)"$', Path("pyproject.toml").read_text())
+# Read the current semver project version from pyproject.toml.
+match = re.search(
+    r'(?m)^version = "(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)"$',
+    Path("pyproject.toml").read_text(),
+)
 if match is None:
     raise SystemExit("Unable to read version from pyproject.toml")
-print(match.group(1))
+print(f"{match.group('major')}.{match.group('minor')}.{match.group('patch')}")
 PY
 )
 git tag -a "v${VERSION}" -m "v${VERSION}"
