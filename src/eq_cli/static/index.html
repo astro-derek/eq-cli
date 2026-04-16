@@ -322,7 +322,7 @@
 'use strict';
 
 // ── Default config (overwritten from /config on load, then localStorage) ──────
-var UNKNOWN_VERSION = '0.0.0';
+var DEFAULT_VERSION = '0.0.0';
 
 var CFG = {
   db_min: -80, db_max: 6, db_interval: 10, graph_height: 10,
@@ -425,7 +425,9 @@ function populateProfilePresets() {
 function applyProfilePreset() {
   var selectEl = document.getElementById('cfg-profile-preset');
   if (!selectEl || !selectEl.value) { return; }
-  var preset = CFG.profile_presets ? CFG.profile_presets[selectEl.value] : null;
+  var presetMap = CFG.profile_presets || {};
+  if (!Object.prototype.hasOwnProperty.call(presetMap, selectEl.value)) { return; }
+  var preset = presetMap[selectEl.value];
   if (!preset) { return; }
 
   ['bar_color', 'peak_color', 'history_color', 'axis_color', 'label_color'].forEach(function (k) {
@@ -1099,7 +1101,7 @@ function wireUi() {
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function init() {
   await loadConfig();
-  document.getElementById('version-badge').textContent = 'v' + (CFG.app_version || UNKNOWN_VERSION);
+  document.getElementById('version-badge').textContent = 'v' + (CFG.app_version || DEFAULT_VERSION);
   rebuildBandGeometry();
   ensurePeakArrays();
 
