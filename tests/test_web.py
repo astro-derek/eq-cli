@@ -261,6 +261,10 @@ def test_web_index_embeds_fallback_profile_presets() -> None:
         assert "'green-based': {" in html
         assert "'minimal': {" in html
         assert "'studio': {" in html
+        assert "bar_color: '#44cc44'" in html
+        assert "peak_color: '#ff6666'" in html
+        assert "axis_color: '#777777'" in html
+        assert "label_color: '#ffffff'" in html
     finally:
         server.stop()
 

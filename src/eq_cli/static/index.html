@@ -354,7 +354,7 @@ var CFG = {
   history_gradient: ' .:-=+*#%@',
   peak_hold_frames: 0, peak_db_labels: false,
   axis_frequencies: null, band_gap: 0, profile_name: '',
-  app_version: '', profile_presets: Object.assign({}, DEFAULT_PROFILE_PRESETS)
+  app_version: '', profile_presets: {}
 };
 
 // Immutable copy of built-in defaults used by "Reset Defaults".
@@ -443,8 +443,7 @@ function openSettings() {
 function populateProfilePresets() {
   var el = document.getElementById('sel-profile');
   if (!el) { return; }
-  var presetMap = CFG.profile_presets || {};
-  if (!Object.keys(presetMap).length) { presetMap = DEFAULT_PROFILE_PRESETS; }
+  var presetMap = getProfilePresetsOrFallback();
   var names = Object.keys(presetMap).sort();
   var selected = CFG.profile_name || el.value || '';
   el.innerHTML = '<option value="">-- select profile --</option>';
@@ -463,8 +462,7 @@ function populateProfilePresets() {
 function applyProfilePreset() {
   var selectEl = document.getElementById('sel-profile');
   if (!selectEl || !selectEl.value) { return; }
-  var presetMap = CFG.profile_presets || {};
-  if (!Object.keys(presetMap).length) { presetMap = DEFAULT_PROFILE_PRESETS; }
+  var presetMap = getProfilePresetsOrFallback();
   if (!Object.prototype.hasOwnProperty.call(presetMap, selectEl.value)) { return; }
   var preset = presetMap[selectEl.value];
   if (!preset) { return; }
@@ -477,6 +475,11 @@ function applyProfilePreset() {
     if (inputEl) { inputEl.value = preset[k]; }
   });
   _saveLocalSettings();
+}
+
+function getProfilePresetsOrFallback() {
+  var presetMap = CFG.profile_presets || {};
+  return Object.keys(presetMap).length ? presetMap : DEFAULT_PROFILE_PRESETS;
 }
 
 function closeSettings() {
