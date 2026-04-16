@@ -223,6 +223,9 @@ def test_web_server_serves_index_html() -> None:
         assert "<u>F</u>reeze" in html
         assert "<u>R</u>eset Peaks" in html
         assert "<u>S</u>napshot" in html
+        assert 'id="btn-freeze" title="[F] Freeze display" accesskey="f"' in html
+        assert 'id="btn-reset" title="[R] Reset peaks" accesskey="r"' in html
+        assert 'id="btn-snap" title="[S] Save PNG" accesskey="s"' in html
         assert "[F] Freeze:" not in html
         assert "document.title = 'frequency-analyzer';" in html
         assert r"frequency-analyzer \u25ae FROZEN" in html

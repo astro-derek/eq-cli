@@ -305,9 +305,9 @@
 
 <div id="footer">
   <div class="tb-group">
-    <button id="btn-freeze" title="[F] Freeze display"><u>F</u>reeze</button>
-    <button id="btn-reset" title="[R] Reset peaks"><u>R</u>eset Peaks</button>
-    <button id="btn-snap" title="[S] Save PNG">&#128247; <u>S</u>napshot</button>
+    <button id="btn-freeze" title="[F] Freeze display" accesskey="f" aria-keyshortcuts="f"><u>F</u>reeze</button>
+    <button id="btn-reset" title="[R] Reset peaks" accesskey="r" aria-keyshortcuts="r"><u>R</u>eset Peaks</button>
+    <button id="btn-snap" title="[S] Save PNG" accesskey="s" aria-keyshortcuts="s">&#128247; <u>S</u>napshot</button>
   </div>
 </div>
 
@@ -1138,9 +1138,9 @@ function setFreezeButtonLabel(btn, isFrozen) {
   if (isFrozen) {
     btn.append(document.createTextNode('\u23f8 '));
   }
-  var key = document.createElement('u');
-  key.textContent = labelText.charAt(0);
-  btn.append(key);
+  var shortcutElement = document.createElement('u');
+  shortcutElement.textContent = labelText.charAt(0);
+  btn.append(shortcutElement);
   btn.append(document.createTextNode(labelText.slice(1)));
 }
 
