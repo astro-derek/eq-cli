@@ -20,6 +20,8 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # Only deploy from the main branch to prevent accidental deletion via --delete.
+    if: github.ref == 'refs/heads/main'
 
     steps:
       - name: Check out repository

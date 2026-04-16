@@ -18,8 +18,8 @@ resource "aws_iam_role" "github_deploy" {
           "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
         }
         StringLike = {
-          # Allows any ref (branch, tag, PR) in the specified repository.
-          "token.actions.githubusercontent.com:sub" = "repo:${var.github_repo}:*"
+          # Restricts deployments to the main branch only.
+          "token.actions.githubusercontent.com:sub" = "repo:${var.github_repo}:ref:refs/heads/main"
         }
       }
     }]
