@@ -58,8 +58,11 @@
 
     #device-select { max-width: 220px; }
 
-    #status {
+    #tb-meta {
       margin-left: auto;
+    }
+
+    #status {
       font-size: 11px;
       color: #8b949e;
       white-space: nowrap;
@@ -282,14 +285,13 @@
     <button id="btn-settings" title="Settings" aria-label="Open settings panel">&#9881; Settings</button>
   </div>
   <div class="tb-sep"></div>
-  <div class="tb-group">
-    <span id="version-badge" title="eq-cli version"></span>
+  <div class="tb-group" id="tb-meta">
     <a id="repo-link" href="https://github.com/astro-derek/eq-cli" target="_blank" rel="noopener noreferrer" title="astro-derek/eq-cli on GitHub">
       <img id="repo-avatar" src="https://github.com/astro-derek.png" alt="astro-derek avatar">
       <span>astro-derek/eq-cli</span>
     </a>
+    <span id="version-badge" title="eq-cli version"></span>
   </div>
-  <span id="status">No device selected</span>
 </div>
 
 <div id="canvas-container">
@@ -593,6 +595,7 @@ var historyRows = [];       // Float32Array[], newest last
 var historyLastPushMs = 0;
 var frozen = false;
 var frozenLevels = null;    // Float32Array cached when frozen
+var runtimeStatusMessage = 'No device selected';
 
 var PEAK_DECAY_DB = 0.5;
 
@@ -909,9 +912,8 @@ function drawFrame(levels, peaks, isFrozen) {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = CFG.label_color;
-    var titleStr = isFrozen
-      ? 'frequency-analyzer \u25ae FROZEN'
-      : 'frequency-analyzer';
+    var titleStr = 'frequency-analyzer \u2014 ' + runtimeStatusMessage;
+    if (isFrozen) { titleStr += ' \u25ae FROZEN'; }
     ctx.fillText(titleStr, W / 2, titleH / 2);
   }
 
@@ -1035,9 +1037,11 @@ async function enumerateDevices() {
       o.textContent = d.label || ('Microphone (' + d.deviceId.slice(0, 8) + '\u2026)');
       sel.appendChild(o);
     });
-    if (!inputs.length) { setStatus('No audio input devices found', 'warn'); }
+    if (!inputs.length) {
+      setRuntimeStatusMessage('No audio input devices found');
+    }
   } catch (e) {
-    setStatus('Cannot list devices: ' + e.message, 'err');
+    setRuntimeStatusMessage('Cannot list devices: ' + e.message);
   }
 }
 
@@ -1047,9 +1051,9 @@ async function requestPermissionAndEnumerate() {
     tmp.getTracks().forEach(function (t) { t.stop(); });
     await enumerateDevices();
     document.getElementById('start-prompt').style.display = 'none';
-    setStatus('Ready \u2014 select a device and click \u25b6 Start', '');
+    setRuntimeStatusMessage('Ready \u2014 select a device and click \u25b6 Start');
   } catch (e) {
-    setStatus('Microphone access denied: ' + e.message, 'err');
+    setRuntimeStatusMessage('Microphone access denied: ' + e.message);
   }
 }
 
@@ -1087,11 +1091,11 @@ async function startAudio(deviceId) {
     historyLastPushMs = 0;
     frozenLevels = null;
 
-    setStatus('Analyzing\u2026', 'ok');
+    setRuntimeStatusMessage('Analyzing\u2026');
     document.getElementById('btn-start').style.display = 'none';
     document.getElementById('btn-stop').style.display = '';
   } catch (e) {
-    setStatus('Audio error: ' + e.message, 'err');
+    setRuntimeStatusMessage('Audio error: ' + e.message);
   }
 }
 
@@ -1118,7 +1122,7 @@ function stopAudio() {
   }
   document.getElementById('btn-start').style.display = '';
   document.getElementById('btn-stop').style.display  = 'none';
-  setStatus('Stopped', '');
+  setRuntimeStatusMessage('Stopped');
 }
 
 // ── Render loop ───────────────────────────────────────────────────────────────
@@ -1157,10 +1161,13 @@ function renderTick() {
 }
 
 // ── UI wiring ─────────────────────────────────────────────────────────────────
-function setStatus(msg, cls) {
-  var el = document.getElementById('status');
-  el.textContent = msg;
-  el.className = cls || '';
+/**
+ * Update the runtime status text used by the chart title row.
+ * @param {string} msg Status text for the current analyzer state.
+ * The new value is rendered on the next animation frame.
+ */
+function setRuntimeStatusMessage(msg) {
+  runtimeStatusMessage = msg;
 }
 
 function setFreezeButtonLabel(btn, isFrozen) {
@@ -1183,7 +1190,10 @@ function wireUi() {
 
   document.getElementById('btn-start').addEventListener('click', async function () {
     var deviceId = document.getElementById('device-select').value;
-    if (!deviceId) { setStatus('Select a device first', 'warn'); return; }
+    if (!deviceId) {
+      setRuntimeStatusMessage('Select a device first');
+      return;
+    }
     await startAudio(deviceId);
   });
 
@@ -1262,7 +1272,7 @@ async function init() {
     if (devs.some(function (d) { return d.kind === 'audioinput' && d.label; })) {
       document.getElementById('start-prompt').style.display = 'none';
       await enumerateDevices();
-      setStatus('Ready \u2014 select a device and click \u25b6 Start', '');
+      setRuntimeStatusMessage('Ready \u2014 select a device and click \u25b6 Start');
     }
   } catch (e) { console.warn('Device enumeration failed, will prompt on detect click:', e); }
 }
