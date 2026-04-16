@@ -133,7 +133,6 @@ def test_build_web_config_exposes_profile_presets() -> None:
     presets = cfg["profile_presets"]
     assert isinstance(presets, dict)
     assert {"studio", "default", "green-based", "minimal"} <= set(presets)
-    assert "studio" in presets
     assert "bar_color" in presets["studio"]
     assert "peak_color" in presets["studio"]
 
