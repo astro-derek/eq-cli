@@ -47,9 +47,11 @@ jobs:
           print(match.group(1))
           PY
           )
-          STATIC_BUILD_DIR=$(mktemp -d)
+          STATIC_BUILD_DIR="${{ runner.temp }}/eq-cli-static-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           export VERSION
           export STATIC_BUILD_DIR
+          rm -rf "${STATIC_BUILD_DIR}"
+          mkdir -p "${STATIC_BUILD_DIR}"
           cp -R src/eq_cli/static/. "${STATIC_BUILD_DIR}/"
           python - <<'PY'
           from pathlib import Path
