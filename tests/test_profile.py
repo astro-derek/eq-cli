@@ -60,6 +60,15 @@ def test_load_profile_reads_neon_night_builtin_profile() -> None:
     assert profile["colors"]["peak"] == "bright_yellow"
 
 
+def test_load_profile_reads_sunset_drive_builtin_profile() -> None:
+    """Sunset-drive profile should expose warm retro-themed color settings."""
+    profile = load_profile(None, "sunset-drive")
+
+    assert profile["title_text"] == "eq-cli sunset-drive"
+    assert profile["colors"]["bar"] == "bright_magenta"
+    assert profile["colors"]["history"] == "bright_cyan"
+
+
 def test_load_profile_reads_named_profile(tmp_path: Path) -> None:
     """Profile loader should return the selected profile object."""
     profile_path = tmp_path / "profiles.json"
