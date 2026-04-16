@@ -478,6 +478,8 @@ function applyProfilePreset() {
 }
 
 function getProfilePresetsOrFallback() {
+  // Return server-provided presets when available; otherwise use built-in
+  // defaults so the profile dropdown is always populated.
   var presetMap = CFG.profile_presets || {};
   return Object.keys(presetMap).length ? presetMap : DEFAULT_PROFILE_PRESETS;
 }

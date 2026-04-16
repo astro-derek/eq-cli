@@ -254,15 +254,47 @@ def test_web_index_embeds_fallback_profile_presets() -> None:
     server = WebServer("127.0.0.1", 0, build_web_config(RenderConfig()))
     server.start()
     try:
-        with urllib.request.urlopen(f"{server.url}") as resp:
+        with urllib.request.urlopen(f"{server.url}", timeout=5) as resp:
             html = resp.read().decode()
         assert "var DEFAULT_PROFILE_PRESETS = {" in html
         assert "'default': {" in html
         assert "'green-based': {" in html
+        assert "'high-contrast': {" in html
         assert "'minimal': {" in html
         assert "'studio': {" in html
+
+        # default profile
+        assert "bar_color: '#44cccc'" in html
+        assert "peak_color: '#cc4444'" in html
+        assert "history_color: '#44cccc'" in html
+        assert "axis_color: '#666666'" in html
+        assert "label_color: '#aaaaaa'" in html
+
+        # green-based profile
+        assert "bar_color: '#44cc44'" in html
+        assert "peak_color: '#66ff66'" in html
+        assert "history_color: '#66ff66'" in html
+        assert "axis_color: '#66ff66'" in html
+        assert "label_color: '#44cc44'" in html
+
+        # high-contrast profile
+        assert "bar_color: '#66ffff'" in html
+        assert "peak_color: '#ff6666'" in html
+        assert "history_color: '#66ffff'" in html
+        assert "axis_color: '#ffffff'" in html
+        assert "label_color: '#ffff66'" in html
+
+        # minimal profile
+        assert "bar_color: '#aaaaaa'" in html
+        assert "peak_color: '#ffffff'" in html
+        assert "history_color: '#aaaaaa'" in html
+        assert "axis_color: '#666666'" in html
+        assert "label_color: '#aaaaaa'" in html
+
+        # studio profile
         assert "bar_color: '#44cc44'" in html
         assert "peak_color: '#ff6666'" in html
+        assert "history_color: '#44cc44'" in html
         assert "axis_color: '#777777'" in html
         assert "label_color: '#ffffff'" in html
     finally:
