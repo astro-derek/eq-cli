@@ -8,6 +8,7 @@ import urllib.request
 
 import pytest
 
+from eq_cli.app import get_app_version
 from eq_cli.loop import RenderConfig
 from eq_cli.web import WebServer, ansi_to_css, build_web_config
 
@@ -219,6 +220,19 @@ def test_web_server_serves_index_html() -> None:
         assert 'id="cfg-history_fps"' in html
         assert "function drawPeakDbLabels(peaks)" in html
         assert "drawPeakDbLabels(peaks);" in html
+    finally:
+        server.stop()
+
+
+def test_web_server_injects_default_version_in_index() -> None:
+    """Served index HTML should include the resolved fallback app version."""
+    server = WebServer("127.0.0.1", 0, build_web_config(RenderConfig()))
+    server.start()
+    try:
+        with urllib.request.urlopen(f"{server.url}") as resp:
+            html = resp.read().decode()
+        assert f"var DEFAULT_VERSION = '{get_app_version()}';" in html
+        assert "__EQ_CLI_VERSION__" not in html
     finally:
         server.stop()
 

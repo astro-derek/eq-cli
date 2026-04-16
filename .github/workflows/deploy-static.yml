@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - "src/eq_cli/static/**"
+      - "pyproject.toml"
   workflow_dispatch:
     inputs:
       environment:
@@ -35,7 +36,21 @@ jobs:
 
       - name: Sync static files to S3
         run: |
-          aws s3 sync src/eq_cli/static/ s3://${{ secrets.S3_BUCKET_NAME }}/ \
+          VERSION=$(python - <<'PY'
+          from pathlib import Path
+          import re
+          
+          content = Path("pyproject.toml").read_text()
+          match = re.search(r'(?m)^version = "(.+)"$', content)
+          if match is None:
+              raise SystemExit("Unable to read version from pyproject.toml")
+          print(match.group(1))
+          PY
+          )
+          mkdir -p /tmp/eq-cli-static
+          cp -R src/eq_cli/static/. /tmp/eq-cli-static/
+          sed -i "s/__EQ_CLI_VERSION__/${VERSION}/g" /tmp/eq-cli-static/index.html
+          aws s3 sync /tmp/eq-cli-static/ s3://${{ secrets.S3_BUCKET_NAME }}/ \
             --delete \
             --cache-control "public,max-age=3600,s-maxage=86400"
 

@@ -20,6 +20,7 @@ from eq_cli.loop import RenderConfig
 from eq_cli.profile import list_builtin_profiles, load_profile, resolve_color_code
 
 _STATIC_DIR = Path(__file__).parent / "static"
+_VERSION_PLACEHOLDER = "__EQ_CLI_VERSION__"
 
 _ANSI_CODE_TO_CSS: dict[str, str] = {
     "30": "#555555",
@@ -242,6 +243,11 @@ def _make_handler_class(
                 self.send_error(404)
                 return
             content = file_path.read_bytes()
+            if filename == "index.html":
+                content = content.replace(
+                    _VERSION_PLACEHOLDER.encode(),
+                    get_app_version().encode(),
+                )
             self.send_response(200)
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(content)))
