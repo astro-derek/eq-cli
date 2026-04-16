@@ -65,37 +65,33 @@ before building artifacts, preventing a broken release from being published.
 
 To create deployable artifacts for a release:
 
-1. Update the version in `pyproject.toml`.
-2. Commit the version bump on `main`.
+1. Ensure `main` is up to date.
+2. Read the current project version from `pyproject.toml`.
 3. Create an annotated tag such as `v0.1.0`.
-4. Push the branch and tag.
+4. Push the tag.
+
+Versioning is now automated: every push to `main` runs the
+`.github/workflows/bump-version.yml` workflow, which increments the patch
+version in `pyproject.toml` and commits it back to `main`.
 
 Example:
 
 ```sh
 git checkout main
 git pull --ff-only origin main
-git add pyproject.toml
-git commit -m "release v0.1.1"
-git tag -a v0.1.1 -m "v0.1.1"
-git push origin main --tags
+VERSION=$(python - <<'PY'
+from pathlib import Path
+import re
+
+match = re.search(r'(?m)^version = "([^"]+)"$', Path("pyproject.toml").read_text())
+if match is None:
+    raise SystemExit("Unable to read version from pyproject.toml")
+print(match.group(1))
+PY
+)
+git tag -a "v${VERSION}" -m "v${VERSION}"
+git push origin "v${VERSION}"
 ```
-
-Current manual release trigger sequence:
-
-```sh
-git checkout main
-git pull --ff-only origin main
-# edit pyproject.toml version
-git add pyproject.toml README.md
-git commit -m "release v0.1.1"
-git tag -a v0.1.1 -m "v0.1.1"
-git push origin main --tags
-```
-
-This manual sequence is the current source of truth for releases and is a good
-candidate for future automation once the release flow has been exercised a few
-times.
 
 The release workflow builds `sdist` and `wheel` artifacts and attaches them to
 the corresponding GitHub Release.
