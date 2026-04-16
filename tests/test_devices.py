@@ -551,7 +551,7 @@ def test_main_web_mode_uses_frequency_analyzer_title_by_default(
     fake_provider: FakeAudioInputDeviceProvider,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Web mode should default the chart/page title to frequency-analyzer."""
+    """Web mode should leave title unset so web defaults can apply consistently."""
     captured: dict[str, object] = {}
 
     def _fake_run_equalizer_web(
@@ -571,4 +571,4 @@ def test_main_web_mode_uses_frequency_analyzer_title_by_default(
     exit_code = main(["--ui", "web"], device_provider=fake_provider)
 
     assert exit_code == 0
-    assert captured["title_text"] == "frequency-analyzer"
+    assert captured["title_text"] is None
