@@ -1132,6 +1132,17 @@ function setStatus(msg, cls) {
   el.className = cls || '';
 }
 
+function setFreezeButtonLabel(btn, isFrozen) {
+  btn.replaceChildren();
+  if (isFrozen) {
+    btn.append(document.createTextNode('\u258e\u258e '));
+  }
+  var key = document.createElement('u');
+  key.textContent = 'F';
+  btn.append(key);
+  btn.append(document.createTextNode(isFrozen ? 'rozen' : 'reeze'));
+}
+
 function wireUi() {
   document.getElementById('btn-detect').addEventListener('click', function () {
     requestPermissionAndEnumerate();
@@ -1151,7 +1162,7 @@ function wireUi() {
     frozen = !frozen;
     var btn = document.getElementById('btn-freeze');
     btn.classList.toggle('active', frozen);
-    btn.innerHTML = frozen ? '\u258e\u258e <u>F</u>rozen' : '<u>F</u>reeze';
+    setFreezeButtonLabel(btn, frozen);
   });
 
   document.getElementById('btn-reset').addEventListener('click', resetPeaks);
