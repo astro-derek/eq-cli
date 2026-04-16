@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - "src/eq_cli/static/**"
+      - "pyproject.toml"
   workflow_dispatch:
     inputs:
       environment:
@@ -35,7 +36,38 @@ jobs:
 
       - name: Sync static files to S3
         run: |
-          aws s3 sync src/eq_cli/static/ s3://${{ secrets.S3_BUCKET_NAME }}/ \
+          VERSION=$(python - <<'PY'
+          from pathlib import Path
+          import re
+          
+          content = Path("pyproject.toml").read_text()
+          match = re.search(
+              r'(?m)^version = "([0-9]+\.[0-9]+\.[0-9]+(?:[a-zA-Z0-9._-]*)?)"$',
+              content,
+          )
+          if match is None:
+              raise SystemExit("Unable to read version from pyproject.toml")
+          print(match.group(1))
+          PY
+          )
+          STATIC_BUILD_DIR="${{ runner.temp }}/static-build"
+          export VERSION
+          export STATIC_BUILD_DIR
+          rm -rf "${STATIC_BUILD_DIR}"
+          mkdir -p "${STATIC_BUILD_DIR}"
+          cp -R src/eq_cli/static/. "${STATIC_BUILD_DIR}/"
+          python - <<'PY'
+          from pathlib import Path
+          import os
+
+          build_dir = Path(os.environ["STATIC_BUILD_DIR"])
+          version = os.environ["VERSION"]
+          index_path = build_dir / "index.html"
+          index_path.write_text(
+              index_path.read_text().replace("__EQ_CLI_VERSION__", version)
+          )
+          PY
+          aws s3 sync "${STATIC_BUILD_DIR}/" s3://${{ secrets.S3_BUCKET_NAME }}/ \
             --delete \
             --cache-control "public,max-age=3600,s-maxage=86400"
 
