@@ -103,6 +103,17 @@
 
     canvas { display: block; width: 100%; height: 100%; }
 
+    #footer {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      padding: 6px 10px;
+      background: #161b22;
+      border-top: 1px solid #21262d;
+      flex-shrink: 0;
+    }
+
     #start-prompt {
       position: absolute;
       inset: 0;
@@ -268,12 +279,6 @@
   </div>
   <div class="tb-sep"></div>
   <div class="tb-group">
-    <button id="btn-freeze" title="[F] Freeze display">Freeze</button>
-    <button id="btn-reset"  title="[R] Reset peaks">Reset Peaks</button>
-    <button id="btn-snap"   title="[S] Save PNG">&#128247; Snapshot</button>
-  </div>
-  <div class="tb-sep"></div>
-  <div class="tb-group">
     <button id="btn-settings" title="Settings" aria-label="Open settings panel">&#9881; Settings</button>
   </div>
   <div class="tb-sep"></div>
@@ -295,6 +300,14 @@
       <p>Click below to allow microphone access, then select a device and click Start.</p>
       <button id="btn-detect">Detect Devices</button>
     </div>
+  </div>
+</div>
+
+<div id="footer">
+  <div class="tb-group">
+    <button id="btn-freeze" title="[F] Freeze display">Freeze</button>
+    <button id="btn-reset" title="[R] Reset peaks">Reset Peaks</button>
+    <button id="btn-snap" title="[S] Save PNG">&#128247; Snapshot</button>
   </div>
 </div>
 

@@ -245,6 +245,38 @@ def test_web_index_defers_boot_until_dom_ready() -> None:
         server.stop()
 
 
+def test_web_index_places_freeze_controls_in_footer() -> None:
+    """Freeze/Reset/Snapshot controls should render in the footer, not toolbar."""
+    server = WebServer("127.0.0.1", 0, build_web_config(RenderConfig()))
+    server.start()
+    try:
+        with urllib.request.urlopen(f"{server.url}") as resp:
+            html = resp.read().decode()
+
+        toolbar_idx = html.find('<div id="toolbar">')
+        canvas_idx = html.find('<div id="canvas-container">')
+        footer_idx = html.find('<div id="footer">')
+        script_idx = html.find("<script>")
+
+        assert toolbar_idx != -1
+        assert canvas_idx != -1
+        assert footer_idx != -1
+        assert script_idx != -1
+        assert toolbar_idx < canvas_idx < footer_idx < script_idx
+
+        toolbar_section = html[toolbar_idx:canvas_idx]
+        assert 'id="btn-freeze"' not in toolbar_section
+        assert 'id="btn-reset"' not in toolbar_section
+        assert 'id="btn-snap"' not in toolbar_section
+
+        footer_section = html[footer_idx:script_idx]
+        assert 'id="btn-freeze"' in footer_section
+        assert 'id="btn-reset"' in footer_section
+        assert 'id="btn-snap"' in footer_section
+    finally:
+        server.stop()
+
+
 def test_web_index_does_not_persist_server_managed_profile_fields() -> None:
     """Browser-saved settings must not overwrite server-managed profile presets."""
     server = WebServer("127.0.0.1", 0, build_web_config(RenderConfig()))
