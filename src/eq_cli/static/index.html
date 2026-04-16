@@ -928,71 +928,73 @@ function setStatus(msg, cls) {
   el.className = cls || '';
 }
 
-document.getElementById('btn-detect').addEventListener('click', function () {
-  requestPermissionAndEnumerate();
-});
+function wireUi() {
+  document.getElementById('btn-detect').addEventListener('click', function () {
+    requestPermissionAndEnumerate();
+  });
 
-document.getElementById('btn-start').addEventListener('click', async function () {
-  var deviceId = document.getElementById('device-select').value;
-  if (!deviceId) { setStatus('Select a device first', 'warn'); return; }
-  await startAudio(deviceId);
-});
+  document.getElementById('btn-start').addEventListener('click', async function () {
+    var deviceId = document.getElementById('device-select').value;
+    if (!deviceId) { setStatus('Select a device first', 'warn'); return; }
+    await startAudio(deviceId);
+  });
 
-document.getElementById('btn-stop').addEventListener('click', stopAudio);
+  document.getElementById('btn-stop').addEventListener('click', stopAudio);
 
-document.getElementById('sel-fft').addEventListener('change', function () {
-  if (analyserNode) { analyserNode.fftSize = getFftSize(); }
-});
+  document.getElementById('sel-fft').addEventListener('change', function () {
+    if (analyserNode) { analyserNode.fftSize = getFftSize(); }
+  });
 
-document.getElementById('btn-freeze').addEventListener('click', function () {
-  frozen = !frozen;
-  var btn = document.getElementById('btn-freeze');
-  btn.classList.toggle('active', frozen);
-  btn.textContent = frozen ? '\u258e\u258e Frozen' : 'Freeze';
-});
+  document.getElementById('btn-freeze').addEventListener('click', function () {
+    frozen = !frozen;
+    var btn = document.getElementById('btn-freeze');
+    btn.classList.toggle('active', frozen);
+    btn.textContent = frozen ? '\u258e\u258e Frozen' : 'Freeze';
+  });
 
-document.getElementById('btn-reset').addEventListener('click', resetPeaks);
+  document.getElementById('btn-reset').addEventListener('click', resetPeaks);
 
-document.getElementById('btn-snap').addEventListener('click', function () {
-  var a = document.createElement('a');
-  a.download = 'eq-cli-' + Date.now() + '.png';
-  a.href = canvas.toDataURL('image/png');
-  a.click();
-});
+  document.getElementById('btn-snap').addEventListener('click', function () {
+    var a = document.createElement('a');
+    a.download = 'eq-cli-' + Date.now() + '.png';
+    a.href = canvas.toDataURL('image/png');
+    a.click();
+  });
 
-document.addEventListener('keydown', function (e) {
-  if (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT') { return; }
-  if (document.getElementById('settings-overlay').style.display === 'block') { return; }
-  switch (e.key.toLowerCase()) {
-    case 'f':
-      document.getElementById('btn-freeze').click();
-      e.preventDefault();
-      break;
-    case 'r':
-      resetPeaks();
-      e.preventDefault();
-      break;
-    case 's':
-      document.getElementById('btn-snap').click();
-      e.preventDefault();
-      break;
-  }
-});
+  document.addEventListener('keydown', function (e) {
+    if (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT') { return; }
+    if (document.getElementById('settings-overlay').style.display === 'block') { return; }
+    switch (e.key.toLowerCase()) {
+      case 'f':
+        document.getElementById('btn-freeze').click();
+        e.preventDefault();
+        break;
+      case 'r':
+        resetPeaks();
+        e.preventDefault();
+        break;
+      case 's':
+        document.getElementById('btn-snap').click();
+        e.preventDefault();
+        break;
+    }
+  });
 
-// Reinitialise canvas pixel layout whenever the container changes size
-var _ro = new ResizeObserver(function () { initLayout(); });
-_ro.observe(document.getElementById('canvas-container'));
+  // Reinitialise canvas pixel layout whenever the container changes size
+  var _ro = new ResizeObserver(function () { initLayout(); });
+  _ro.observe(document.getElementById('canvas-container'));
 
-// ── Settings panel event wiring ───────────────────────────────────────────────
-document.getElementById('btn-settings').addEventListener('click', openSettings);
-document.getElementById('btn-settings-close').addEventListener('click', closeSettings);
-document.getElementById('btn-settings-cancel').addEventListener('click', closeSettings);
-document.getElementById('btn-settings-save').addEventListener('click', applySettings);
-document.getElementById('btn-settings-reset').addEventListener('click', resetSettingsToDefaults);
-// Click on the backdrop (not the panel) also closes
-document.getElementById('settings-overlay').addEventListener('click', function (e) {
-  if (e.target === this) { closeSettings(); }
-});
+  // ── Settings panel event wiring ─────────────────────────────────────────────
+  document.getElementById('btn-settings').addEventListener('click', openSettings);
+  document.getElementById('btn-settings-close').addEventListener('click', closeSettings);
+  document.getElementById('btn-settings-cancel').addEventListener('click', closeSettings);
+  document.getElementById('btn-settings-save').addEventListener('click', applySettings);
+  document.getElementById('btn-settings-reset').addEventListener('click', resetSettingsToDefaults);
+  // Click on the backdrop (not the panel) also closes
+  document.getElementById('settings-overlay').addEventListener('click', function (e) {
+    if (e.target === this) { closeSettings(); }
+  });
+}
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function init() {
@@ -1019,7 +1021,10 @@ async function init() {
   } catch (e) { console.warn('Device enumeration failed, will prompt on detect click:', e); }
 }
 
-init();
+window.addEventListener('DOMContentLoaded', function () {
+  wireUi();
+  init();
+});
 </script>
 
 <!-- ── Settings overlay ──────────────────────────────────────────────────── -->
