@@ -388,7 +388,7 @@ def test_web_index_frequency_axis_alignment_and_label_anchor() -> None:
         server.stop()
 
 
-def test_web_index_includes_graph_style_options() -> None:
+def test_web_index_includes_graph_style_setting() -> None:
     """Settings and renderer should support both filled bars and line graph modes."""
     server = WebServer("127.0.0.1", 0, build_web_config(RenderConfig()))
     server.start()
@@ -403,7 +403,7 @@ def test_web_index_includes_graph_style_options() -> None:
         server.stop()
 
 
-def test_web_index_uses_fixed_step_band_widths() -> None:
+def test_web_band_span_calculation_uses_fixed_step() -> None:
     """Band spans should use one width step for all bars across the graph."""
     server = WebServer("127.0.0.1", 0, build_web_config(RenderConfig()))
     server.start()
