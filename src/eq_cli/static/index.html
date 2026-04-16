@@ -95,6 +95,103 @@
     #start-card p  { color: #8b949e; font-size: 12px; margin-bottom: 16px; line-height: 1.5; }
     #btn-detect    { font-size: 12px; padding: 6px 18px; }
 
+    /* ── Settings panel ──────────────────────────────────────────────────── */
+    #settings-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.65);
+      z-index: 200;
+      overflow-y: auto;
+    }
+
+    #settings-panel {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      max-width: 500px;
+      margin: 32px auto;
+      padding: 20px 24px;
+      font-size: 12px;
+    }
+
+    #settings-panel h3 {
+      color: #58a6ff;
+      font-size: 13px;
+      margin-bottom: 4px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    #settings-panel .settings-subtitle {
+      color: #8b949e;
+      font-size: 11px;
+      margin-bottom: 14px;
+    }
+
+    .settings-section { margin-bottom: 14px; }
+
+    .settings-section-title {
+      color: #8b949e;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 8px;
+      border-bottom: 1px solid #21262d;
+      padding-bottom: 4px;
+    }
+
+    .settings-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+
+    .settings-row label {
+      flex: 0 0 180px;
+      color: #c9d1d9;
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .settings-row input[type="text"],
+    .settings-row input[type="number"],
+    .settings-row select {
+      flex: 1;
+      background: #21262d;
+      color: #c9d1d9;
+      border: 1px solid #30363d;
+      padding: 3px 6px;
+      border-radius: 4px;
+      font-family: inherit;
+      font-size: 11px;
+    }
+
+    .settings-row input[type="color"] {
+      flex: 0 0 40px;
+      height: 24px;
+      padding: 1px 2px;
+      background: #21262d;
+      border: 1px solid #30363d;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .settings-row input[type="checkbox"] {
+      flex: 0 0 auto;
+      cursor: pointer;
+      width: 14px;
+      height: 14px;
+    }
+
+    #settings-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 16px;
+      padding-top: 12px;
+      border-top: 1px solid #21262d;
+    }
 
   </style>
 </head>
@@ -142,6 +239,10 @@
     <button id="btn-reset"  title="[R] Reset peaks">Reset Peaks</button>
     <button id="btn-snap"   title="[S] Save PNG">&#128247; Snapshot</button>
   </div>
+  <div class="tb-sep"></div>
+  <div class="tb-group">
+    <button id="btn-settings" title="Settings">&#9881; Settings</button>
+  </div>
   <span id="status">No device selected</span>
 </div>
 
@@ -159,7 +260,7 @@
 <script>
 'use strict';
 
-// ── Default config (overwritten from /config on load) ─────────────────────────
+// ── Default config (overwritten from /config on load, then localStorage) ──────
 var CFG = {
   db_min: -80, db_max: 6, db_interval: 10, graph_height: 10,
   band_count: 64, gain_db: 0, volume_mode: 'relative', channel_mode: 'sum',
@@ -173,11 +274,123 @@ var CFG = {
   axis_frequencies: null, band_gap: 0
 };
 
+// Immutable copy of built-in defaults used by "Reset Defaults".
+var DEFAULTS = JSON.parse(JSON.stringify(CFG));
+
 async function loadConfig() {
   try {
     var r = await fetch('/config');
     if (r.ok) { Object.assign(CFG, await r.json()); }
   } catch (e) { console.warn('Failed to load config, using defaults:', e); }
+  // User-saved browser settings take the highest priority.
+  var saved = _loadLocalSettings();
+  if (saved) { Object.assign(CFG, saved); }
+}
+
+// ── localStorage settings helpers ─────────────────────────────────────────────
+function _loadLocalSettings() {
+  try {
+    var raw = localStorage.getItem('eq-cli-settings');
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+}
+
+function _saveLocalSettings() {
+  try { localStorage.setItem('eq-cli-settings', JSON.stringify(CFG)); } catch (e) {}
+}
+
+// ── Settings panel ────────────────────────────────────────────────────────────
+function openSettings() {
+  var colorKeys = ['bar_color', 'peak_color', 'history_color', 'axis_color', 'label_color'];
+  colorKeys.forEach(function (k) {
+    var el = document.getElementById('cfg-' + k);
+    if (el) { el.value = CFG[k] || '#000000'; }
+  });
+
+  var intKeys = ['db_min', 'db_max', 'db_interval', 'graph_height', 'band_count',
+                 'band_gap', 'peak_hold_frames', 'history_rows'];
+  intKeys.forEach(function (k) {
+    var el = document.getElementById('cfg-' + k);
+    if (el) { el.value = CFG[k] !== undefined ? String(CFG[k]) : ''; }
+  });
+
+  var gainEl = document.getElementById('cfg-gain_db');
+  if (gainEl) { gainEl.value = String(CFG.gain_db !== undefined ? CFG.gain_db : 0); }
+
+  var strKeys = ['db_marker_style', 'history_gradient', 'title_text'];
+  strKeys.forEach(function (k) {
+    var el = document.getElementById('cfg-' + k);
+    if (el) { el.value = CFG[k] !== undefined ? CFG[k] : ''; }
+  });
+
+  var boolKeys = ['peak_db_labels', 'show_title', 'show_axis_labels', 'show_shortcuts'];
+  boolKeys.forEach(function (k) {
+    var el = document.getElementById('cfg-' + k);
+    if (el) { el.checked = !!CFG[k]; }
+  });
+
+  var axFreqEl = document.getElementById('cfg-axis_frequencies');
+  if (axFreqEl) {
+    axFreqEl.value = CFG.axis_frequencies ? CFG.axis_frequencies.join(',') : '';
+  }
+
+  document.getElementById('settings-overlay').style.display = 'block';
+}
+
+function closeSettings() {
+  document.getElementById('settings-overlay').style.display = 'none';
+}
+
+function applySettings() {
+  var intKeys = ['db_min', 'db_max', 'db_interval', 'graph_height', 'band_count',
+                 'band_gap', 'peak_hold_frames', 'history_rows'];
+  intKeys.forEach(function (k) {
+    var el = document.getElementById('cfg-' + k);
+    if (!el) { return; }
+    var v = parseInt(el.value, 10);
+    CFG[k] = isNaN(v) ? 0 : v;
+  });
+
+  var gainEl = document.getElementById('cfg-gain_db');
+  if (gainEl) {
+    var g = parseFloat(gainEl.value);
+    CFG.gain_db = isNaN(g) ? 0 : g;
+  }
+
+  ['bar_color', 'peak_color', 'history_color', 'axis_color', 'label_color',
+   'db_marker_style', 'history_gradient', 'title_text'].forEach(function (k) {
+    var el = document.getElementById('cfg-' + k);
+    if (el) { CFG[k] = el.value; }
+  });
+
+  ['peak_db_labels', 'show_title', 'show_axis_labels', 'show_shortcuts'].forEach(function (k) {
+    var el = document.getElementById('cfg-' + k);
+    if (el) { CFG[k] = el.checked; }
+  });
+
+  var axFreqEl = document.getElementById('cfg-axis_frequencies');
+  if (axFreqEl) {
+    var raw = axFreqEl.value.trim();
+    CFG.axis_frequencies = raw
+      ? raw.split(',').map(function (s) { return parseFloat(s.trim()); })
+           .filter(function (n) { return isFinite(n) && n > 0; })
+      : null;
+  }
+
+  _saveLocalSettings();
+  closeSettings();
+  rebuildBandGeometry();
+  ensurePeakArrays();
+  resetPeaks();
+  historyRows = [];
+  initLayout();
+  document.title = CFG.title_text || 'eq-cli';
+}
+
+function resetSettingsToDefaults() {
+  Object.assign(CFG, JSON.parse(JSON.stringify(DEFAULTS)));
+  try { localStorage.removeItem('eq-cli-settings'); } catch (e) {}
+  openSettings();
 }
 
 // ── Audio state ───────────────────────────────────────────────────────────────
@@ -749,6 +962,7 @@ document.getElementById('btn-snap').addEventListener('click', function () {
 
 document.addEventListener('keydown', function (e) {
   if (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT') { return; }
+  if (document.getElementById('settings-overlay').style.display === 'block') { return; }
   switch (e.key.toLowerCase()) {
     case 'f':
       document.getElementById('btn-freeze').click();
@@ -768,6 +982,17 @@ document.addEventListener('keydown', function (e) {
 // Reinitialise canvas pixel layout whenever the container changes size
 var _ro = new ResizeObserver(function () { initLayout(); });
 _ro.observe(document.getElementById('canvas-container'));
+
+// ── Settings panel event wiring ───────────────────────────────────────────────
+document.getElementById('btn-settings').addEventListener('click', openSettings);
+document.getElementById('btn-settings-close').addEventListener('click', closeSettings);
+document.getElementById('btn-settings-cancel').addEventListener('click', closeSettings);
+document.getElementById('btn-settings-save').addEventListener('click', applySettings);
+document.getElementById('btn-settings-reset').addEventListener('click', resetSettingsToDefaults);
+// Click on the backdrop (not the panel) also closes
+document.getElementById('settings-overlay').addEventListener('click', function (e) {
+  if (e.target === this) { closeSettings(); }
+});
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function init() {
@@ -796,5 +1021,65 @@ async function init() {
 
 init();
 </script>
+
+<!-- ── Settings overlay ──────────────────────────────────────────────────── -->
+<div id="settings-overlay" style="display:none">
+  <div id="settings-panel">
+    <h3>Settings <button id="btn-settings-close" title="Close">&#10005;</button></h3>
+    <p class="settings-subtitle">Changes are saved locally in your browser and persist across page loads.</p>
+
+    <div class="settings-section">
+      <div class="settings-section-title">Colors</div>
+      <div class="settings-row"><label for="cfg-bar_color">Bar color</label><input type="color" id="cfg-bar_color"></div>
+      <div class="settings-row"><label for="cfg-peak_color">Peak color</label><input type="color" id="cfg-peak_color"></div>
+      <div class="settings-row"><label for="cfg-history_color">History color</label><input type="color" id="cfg-history_color"></div>
+      <div class="settings-row"><label for="cfg-axis_color">Axis color</label><input type="color" id="cfg-axis_color"></div>
+      <div class="settings-row"><label for="cfg-label_color">Label color</label><input type="color" id="cfg-label_color"></div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-section-title">dB Scale</div>
+      <div class="settings-row"><label for="cfg-db_min">Min dB</label><input type="number" id="cfg-db_min" step="1"></div>
+      <div class="settings-row"><label for="cfg-db_max">Max dB</label><input type="number" id="cfg-db_max" step="1"></div>
+      <div class="settings-row"><label for="cfg-db_interval">dB interval</label><input type="number" id="cfg-db_interval" step="1" min="1"></div>
+      <div class="settings-row"><label for="cfg-graph_height">Graph height (0&nbsp;=&nbsp;auto)</label><input type="number" id="cfg-graph_height" step="1" min="0"></div>
+      <div class="settings-row">
+        <label for="cfg-db_marker_style">dB marker style</label>
+        <select id="cfg-db_marker_style">
+          <option value="spaced">Spaced</option>
+          <option value="all">All</option>
+          <option value="minimal">Minimal</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-section-title">Spectrum</div>
+      <div class="settings-row"><label for="cfg-band_count">Band count</label><input type="number" id="cfg-band_count" step="1" min="16" max="256"></div>
+      <div class="settings-row"><label for="cfg-gain_db">Gain (dB)</label><input type="number" id="cfg-gain_db" step="0.5"></div>
+      <div class="settings-row"><label for="cfg-band_gap">Band gap (px)</label><input type="number" id="cfg-band_gap" step="1" min="0"></div>
+      <div class="settings-row"><label for="cfg-peak_hold_frames">Peak hold (frames)</label><input type="number" id="cfg-peak_hold_frames" step="1" min="0"></div>
+      <div class="settings-row"><label for="cfg-peak_db_labels">Peak dB labels</label><input type="checkbox" id="cfg-peak_db_labels"></div>
+      <div class="settings-row"><label for="cfg-history_rows">History rows (0&nbsp;=&nbsp;off)</label><input type="number" id="cfg-history_rows" step="1" min="0"></div>
+      <div class="settings-row"><label for="cfg-history_gradient">History gradient chars</label><input type="text" id="cfg-history_gradient"></div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-section-title">Display</div>
+      <div class="settings-row"><label for="cfg-show_title">Show title</label><input type="checkbox" id="cfg-show_title"></div>
+      <div class="settings-row"><label for="cfg-title_text">Title text</label><input type="text" id="cfg-title_text"></div>
+      <div class="settings-row"><label for="cfg-show_axis_labels">Show axis labels</label><input type="checkbox" id="cfg-show_axis_labels"></div>
+      <div class="settings-row"><label for="cfg-show_shortcuts">Show shortcuts bar</label><input type="checkbox" id="cfg-show_shortcuts"></div>
+      <div class="settings-row"><label for="cfg-axis_frequencies">Axis frequencies (Hz, CSV)</label><input type="text" id="cfg-axis_frequencies" placeholder="20,50,100,200,500,1000,2000,5000,10000,20000"></div>
+    </div>
+
+    <div id="settings-actions">
+      <button id="btn-settings-save">&#128190; Save</button>
+      <button id="btn-settings-reset">Reset Defaults</button>
+      <button id="btn-settings-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
