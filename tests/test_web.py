@@ -247,6 +247,8 @@ def test_web_server_serves_index_html() -> None:
         assert "[F] Freeze:" not in html
         assert "document.title = 'frequency-analyzer';" in html
         assert "var runtimeStatusMessage = 'No device selected';" in html
+        assert "function setRuntimeStatusMessage(msg) {" in html
+        assert "runtimeStatusMessage = msg;" in html
         assert (
             r"var titleStr = 'frequency-analyzer \u2014 ' + runtimeStatusMessage;"
             in html
