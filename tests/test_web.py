@@ -187,6 +187,19 @@ def test_web_server_serves_index_html() -> None:
         server.stop()
 
 
+def test_web_index_defers_boot_until_dom_ready() -> None:
+    """The page should defer UI wiring/init until DOMContentLoaded fires."""
+    server = WebServer("127.0.0.1", 0, build_web_config(RenderConfig()))
+    server.start()
+    try:
+        with urllib.request.urlopen(f"{server.url}") as resp:
+            html = resp.read().decode()
+        assert "window.addEventListener('DOMContentLoaded'" in html
+        assert "wireUi();" in html
+    finally:
+        server.stop()
+
+
 def test_web_server_serves_index_html_via_explicit_path() -> None:
     """Accessing /index.html explicitly should also serve the page."""
     server = WebServer("127.0.0.1", 0, build_web_config(RenderConfig()))
