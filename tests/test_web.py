@@ -205,6 +205,8 @@ def test_web_server_serves_index_html() -> None:
         assert 'id="version-badge"' in html
         assert 'id="repo-link"' in html
         assert 'id="sel-profile"' in html
+        assert '<label for="device-select">Device:</label>' in html
+        assert '<label for="device-select">&#127908;</label>' not in html
         assert 'id="cfg-volume_mode"' in html
         assert 'id="cfg-channel_mode"' in html
         assert 'id="cfg-fft_size"' in html
