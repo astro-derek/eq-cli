@@ -249,6 +249,22 @@ def test_web_index_does_not_persist_server_managed_profile_fields() -> None:
         server.stop()
 
 
+def test_web_index_embeds_fallback_profile_presets() -> None:
+    """Static page should include fallback built-in profile presets."""
+    server = WebServer("127.0.0.1", 0, build_web_config(RenderConfig()))
+    server.start()
+    try:
+        with urllib.request.urlopen(f"{server.url}") as resp:
+            html = resp.read().decode()
+        assert "var DEFAULT_PROFILE_PRESETS = {" in html
+        assert "'default': {" in html
+        assert "'green-based': {" in html
+        assert "'minimal': {" in html
+        assert "'studio': {" in html
+    finally:
+        server.stop()
+
+
 def test_web_server_serves_index_html_via_explicit_path() -> None:
     """Accessing /index.html explicitly should also serve the page."""
     server = WebServer("127.0.0.1", 0, build_web_config(RenderConfig()))

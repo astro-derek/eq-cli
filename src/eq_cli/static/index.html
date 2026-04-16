@@ -304,6 +304,43 @@
 // ── Default config (overwritten from /config on load, then localStorage) ──────
 var DEFAULT_VERSION = '0.0.0';
 var DEFAULT_HISTORY_FPS = 12;
+var DEFAULT_PROFILE_PRESETS = {
+  'default': {
+    bar_color: '#44cccc',
+    peak_color: '#cc4444',
+    history_color: '#44cccc',
+    axis_color: '#666666',
+    label_color: '#aaaaaa'
+  },
+  'green-based': {
+    bar_color: '#44cc44',
+    peak_color: '#66ff66',
+    history_color: '#66ff66',
+    axis_color: '#66ff66',
+    label_color: '#44cc44'
+  },
+  'high-contrast': {
+    bar_color: '#66ffff',
+    peak_color: '#ff6666',
+    history_color: '#66ffff',
+    axis_color: '#ffffff',
+    label_color: '#ffff66'
+  },
+  'minimal': {
+    bar_color: '#aaaaaa',
+    peak_color: '#ffffff',
+    history_color: '#aaaaaa',
+    axis_color: '#666666',
+    label_color: '#aaaaaa'
+  },
+  'studio': {
+    bar_color: '#44cc44',
+    peak_color: '#ff6666',
+    history_color: '#44cc44',
+    axis_color: '#777777',
+    label_color: '#ffffff'
+  }
+};
 
 var CFG = {
   db_min: -80, db_max: 6, db_interval: 10, graph_height: 10,
@@ -317,7 +354,7 @@ var CFG = {
   history_gradient: ' .:-=+*#%@',
   peak_hold_frames: 0, peak_db_labels: false,
   axis_frequencies: null, band_gap: 0, profile_name: '',
-  app_version: '', profile_presets: {}
+  app_version: '', profile_presets: Object.assign({}, DEFAULT_PROFILE_PRESETS)
 };
 
 // Immutable copy of built-in defaults used by "Reset Defaults".
@@ -406,7 +443,9 @@ function openSettings() {
 function populateProfilePresets() {
   var el = document.getElementById('sel-profile');
   if (!el) { return; }
-  var names = Object.keys(CFG.profile_presets || {}).sort();
+  var presetMap = CFG.profile_presets || {};
+  if (!Object.keys(presetMap).length) { presetMap = DEFAULT_PROFILE_PRESETS; }
+  var names = Object.keys(presetMap).sort();
   var selected = CFG.profile_name || el.value || '';
   el.innerHTML = '<option value="">-- select profile --</option>';
   names.forEach(function (name) {
@@ -425,6 +464,7 @@ function applyProfilePreset() {
   var selectEl = document.getElementById('sel-profile');
   if (!selectEl || !selectEl.value) { return; }
   var presetMap = CFG.profile_presets || {};
+  if (!Object.keys(presetMap).length) { presetMap = DEFAULT_PROFILE_PRESETS; }
   if (!Object.prototype.hasOwnProperty.call(presetMap, selectEl.value)) { return; }
   var preset = presetMap[selectEl.value];
   if (!preset) { return; }
