@@ -361,7 +361,7 @@ var CFG = {
   fft_size: 4096, history_fps: DEFAULT_HISTORY_FPS,
   bar_color: '#44cccc', peak_color: '#cc4444',
   history_color: '#44cccc', axis_color: '#666666', label_color: '#aaaaaa',
-  show_title: true, title_text: 'frequency-analyzer',
+  show_title: true,
   show_axis_labels: true, show_shortcuts: false,
   db_marker_style: 'spaced', history_rows: 0,
   history_gradient: ' .:-=+*#%@',
@@ -426,7 +426,7 @@ function openSettings() {
   var gainEl = document.getElementById('cfg-gain_db');
   if (gainEl) { gainEl.value = String(CFG.gain_db !== undefined ? CFG.gain_db : 0); }
 
-  var strKeys = ['db_marker_style', 'history_gradient', 'title_text'];
+  var strKeys = ['db_marker_style', 'history_gradient'];
   strKeys.forEach(function (k) {
     var el = document.getElementById('cfg-' + k);
     if (el) { el.value = CFG[k] !== undefined ? CFG[k] : ''; }
@@ -520,7 +520,7 @@ function applySettings() {
   }
 
   ['bar_color', 'peak_color', 'history_color', 'axis_color', 'label_color',
-   'db_marker_style', 'history_gradient', 'title_text'].forEach(function (k) {
+   'db_marker_style', 'history_gradient'].forEach(function (k) {
     var el = document.getElementById('cfg-' + k);
     if (el) { CFG[k] = el.value; }
   });
@@ -558,7 +558,7 @@ function applySettings() {
   historyLastPushMs = 0;
   if (analyserNode) { analyserNode.fftSize = getFftSize(); }
   initLayout();
-  document.title = CFG.title_text || 'frequency-analyzer';
+  document.title = 'frequency-analyzer';
 }
 
 function resetSettingsToDefaults() {
@@ -895,8 +895,8 @@ function drawFrame(levels, peaks, isFrozen) {
     ctx.textBaseline = 'middle';
     ctx.fillStyle = CFG.label_color;
     var titleStr = isFrozen
-      ? (CFG.title_text + ' \u25ae FROZEN')
-      : CFG.title_text;
+      ? 'frequency-analyzer \u25ae FROZEN'
+      : 'frequency-analyzer';
     ctx.fillText(titleStr, W / 2, titleH / 2);
   }
 
@@ -1215,7 +1215,7 @@ async function init() {
   rebuildBandGeometry();
   ensurePeakArrays();
 
-  document.title = CFG.title_text || 'frequency-analyzer';
+  document.title = 'frequency-analyzer';
   populateProfilePresets();
 
   initLayout();
@@ -1313,7 +1313,6 @@ window.addEventListener('DOMContentLoaded', function () {
     <div class="settings-section">
       <div class="settings-section-title">Display</div>
       <div class="settings-row"><label for="cfg-show_title">Show title</label><input type="checkbox" id="cfg-show_title"></div>
-      <div class="settings-row"><label for="cfg-title_text">Title text</label><input type="text" id="cfg-title_text"></div>
       <div class="settings-row"><label for="cfg-show_axis_labels">Show axis labels</label><input type="checkbox" id="cfg-show_axis_labels"></div>
       <div class="settings-row"><label for="cfg-show_shortcuts">Show shortcuts bar</label><input type="checkbox" id="cfg-show_shortcuts"></div>
       <div class="settings-row"><label for="cfg-axis_frequencies">Axis frequencies (Hz, CSV)</label><input type="text" id="cfg-axis_frequencies" placeholder="20,50,100,200,500,1000,2000,5000,10000,20000"></div>
