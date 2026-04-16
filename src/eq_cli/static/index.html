@@ -58,8 +58,11 @@
 
     #device-select { max-width: 220px; }
 
-    #status {
+    #tb-meta {
       margin-left: auto;
+    }
+
+    #status {
       font-size: 11px;
       color: #8b949e;
       white-space: nowrap;
@@ -282,14 +285,13 @@
     <button id="btn-settings" title="Settings" aria-label="Open settings panel">&#9881; Settings</button>
   </div>
   <div class="tb-sep"></div>
-  <div class="tb-group">
-    <span id="version-badge" title="eq-cli version"></span>
+  <div class="tb-group" id="tb-meta">
     <a id="repo-link" href="https://github.com/astro-derek/eq-cli" target="_blank" rel="noopener noreferrer" title="astro-derek/eq-cli on GitHub">
       <img id="repo-avatar" src="https://github.com/astro-derek.png" alt="astro-derek avatar">
       <span>astro-derek/eq-cli</span>
     </a>
+    <span id="version-badge" title="eq-cli version"></span>
   </div>
-  <span id="status">No device selected</span>
 </div>
 
 <div id="canvas-container">
@@ -593,6 +595,7 @@ var historyRows = [];       // Float32Array[], newest last
 var historyLastPushMs = 0;
 var frozen = false;
 var frozenLevels = null;    // Float32Array cached when frozen
+var runtimeStatusMessage = 'No device selected';
 
 var PEAK_DECAY_DB = 0.5;
 
@@ -909,9 +912,8 @@ function drawFrame(levels, peaks, isFrozen) {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = CFG.label_color;
-    var titleStr = isFrozen
-      ? 'frequency-analyzer \u25ae FROZEN'
-      : 'frequency-analyzer';
+    var titleStr = 'frequency-analyzer \u2014 ' + runtimeStatusMessage;
+    if (isFrozen) { titleStr += ' \u25ae FROZEN'; }
     ctx.fillText(titleStr, W / 2, titleH / 2);
   }
 
@@ -1158,9 +1160,7 @@ function renderTick() {
 
 // ── UI wiring ─────────────────────────────────────────────────────────────────
 function setStatus(msg, cls) {
-  var el = document.getElementById('status');
-  el.textContent = msg;
-  el.className = cls || '';
+  runtimeStatusMessage = msg;
 }
 
 function setFreezeButtonLabel(btn, isFrozen) {

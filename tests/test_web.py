@@ -218,6 +218,7 @@ def test_web_server_serves_index_html() -> None:
         assert "<title>frequency-analyzer</title>" in html
         assert 'id="version-badge"' in html
         assert 'id="repo-link"' in html
+        assert 'id="tb-meta"' in html
         assert 'id="sel-profile"' in html
         assert '<label for="device-select">Device:</label>' in html
         assert '<label for="device-select">&#127908;</label>' not in html
@@ -245,9 +246,15 @@ def test_web_server_serves_index_html() -> None:
         ) in html
         assert "[F] Freeze:" not in html
         assert "document.title = 'frequency-analyzer';" in html
-        assert r"frequency-analyzer \u25ae FROZEN" in html
+        assert "var runtimeStatusMessage = 'No device selected';" in html
+        assert (
+            r"var titleStr = 'frequency-analyzer \u2014 ' + runtimeStatusMessage;"
+            in html
+        )
+        assert "if (isFrozen) { titleStr += ' \\u25ae FROZEN'; }" in html
         assert "function drawPeakDbLabels(peaks)" in html
         assert "drawPeakDbLabels(peaks);" in html
+        assert html.index('id="repo-link"') < html.index('id="version-badge"')
     finally:
         server.stop()
 
