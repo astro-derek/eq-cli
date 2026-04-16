@@ -253,6 +253,8 @@ def test_web_server_serves_index_html() -> None:
             r"var titleStr = 'frequency-analyzer \u2014 ' + runtimeStatusMessage;"
             in html
         )
+        assert "setRuntimeStatusMessage('Analyzing\\u2026');" in html
+        assert "setRuntimeStatusMessage('Stopped');" in html
         assert "if (isFrozen) { titleStr += ' \\u25ae FROZEN'; }" in html
         assert "function drawPeakDbLabels(peaks)" in html
         assert "drawPeakDbLabels(peaks);" in html

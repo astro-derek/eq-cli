@@ -1037,9 +1037,9 @@ async function enumerateDevices() {
       o.textContent = d.label || ('Microphone (' + d.deviceId.slice(0, 8) + '\u2026)');
       sel.appendChild(o);
     });
-        if (!inputs.length) {
-          setRuntimeStatusMessage('No audio input devices found');
-        }
+    if (!inputs.length) {
+      setRuntimeStatusMessage('No audio input devices found');
+    }
   } catch (e) {
     setRuntimeStatusMessage('Cannot list devices: ' + e.message);
   }
