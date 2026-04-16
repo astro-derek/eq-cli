@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import urllib.error
 import urllib.request
 
@@ -194,8 +195,17 @@ def test_web_index_defers_boot_until_dom_ready() -> None:
     try:
         with urllib.request.urlopen(f"{server.url}") as resp:
             html = resp.read().decode()
-        assert "window.addEventListener('DOMContentLoaded'" in html
-        assert "wireUi();" in html
+        assert "function wireUi()" in html
+        listener = "window.addEventListener('DOMContentLoaded', function () {"
+        listener_idx = html.find(listener)
+        assert listener_idx != -1, "DOMContentLoaded listener was not found"
+        wire_idx = html.find("wireUi();", listener_idx)
+        assert wire_idx != -1, "wireUi() was not called in DOMContentLoaded listener"
+        init_idx = html.find("init();", wire_idx)
+        assert init_idx != -1, "init() was not called after wireUi()"
+        assert listener_idx < wire_idx < init_idx
+        assert len(re.findall(r"\bwireUi\(\);", html)) == 1
+        assert len(re.findall(r"\binit\(\);", html)) == 1
     finally:
         server.stop()
 
