@@ -830,6 +830,36 @@ function dbToY(db) {
   return L.barY + norm * L.barH;
 }
 
+function drawPeakDbLabels(peaks) {
+  if (!CFG.peak_db_labels || !peaks) { return; }
+
+  ctx.font = '10px Consolas,monospace';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'bottom';
+  ctx.fillStyle = CFG.label_color;
+
+  for (var i = 0; i < peaks.length; i++) {
+    var peakDb = peaks[i];
+    if (peakDb <= CFG.db_min) { continue; }
+
+    var left = i > 0 ? peaks[i - 1] : CFG.db_min;
+    var right = i + 1 < peaks.length ? peaks[i + 1] : CFG.db_min;
+    if (peakDb < left || peakDb < right) { continue; }
+
+    var label = String(Math.abs(Math.round(peakDb)));
+    var span = bandSpans[i];
+    var labelWidth = ctx.measureText(label).width;
+    if (labelWidth > span.w) { continue; }
+
+    var labelX = span.x + (span.w - labelWidth) / 2;
+    var peakY = Math.round(dbToY(peakDb));
+    var labelY = peakY - 2;
+    if (labelY <= L.barY + 8) { continue; }
+
+    ctx.fillText(label, labelX, labelY);
+  }
+}
+
 // ── Canvas rendering ──────────────────────────────────────────────────────────
 function drawFrame(levels, peaks, isFrozen) {
   var W = L.W, H = L.H;
@@ -895,6 +925,7 @@ function drawFrame(levels, peaks, isFrozen) {
       ctx.fillRect(psp.x, py, psp.w, 1);
     }
   }
+  drawPeakDbLabels(peaks);
 
   // Horizontal frequency axis line
   ctx.fillStyle = CFG.axis_color;

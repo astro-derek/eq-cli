@@ -217,6 +217,8 @@ def test_web_server_serves_index_html() -> None:
         assert 'id="cfg-channel_mode"' in html
         assert 'id="cfg-fft_size"' in html
         assert 'id="cfg-history_fps"' in html
+        assert "function drawPeakDbLabels(peaks)" in html
+        assert "drawPeakDbLabels(peaks);" in html
     finally:
         server.stop()
 
