@@ -137,7 +137,7 @@ def test_build_web_config_exposes_profile_presets() -> None:
     assert "peak_color" in presets["studio"]
 
 
-def test_build_web_config_app_version_present() -> None:
+def test_build_web_config_includes_app_version() -> None:
     """The app version exposed to the browser should be a non-empty string."""
     cfg = build_web_config(RenderConfig())
     assert isinstance(cfg["app_version"], str)

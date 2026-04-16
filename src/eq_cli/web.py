@@ -95,7 +95,16 @@ def _resolve_graph_height(
 
 
 def _profile_color_to_css(color_name: str | None) -> str | None:
-    """Resolve a profile color name to a CSS hex color string."""
+    """Resolve a profile color name to a CSS hex color string.
+
+    Args:
+        color_name: Optional profile color name accepted by
+            ``resolve_color_code``.
+
+    Returns:
+        The resolved CSS hex color string, or ``None`` when no color name is
+        provided or the profile color resolves to ``None``.
+    """
     ansi_code = resolve_color_code(color_name)
     if ansi_code is None:
         return None
@@ -103,7 +112,14 @@ def _profile_color_to_css(color_name: str | None) -> str | None:
 
 
 def _build_web_profile_presets() -> dict[str, dict[str, str]]:
-    """Build built-in profile presets consumable by the web settings UI."""
+    """Build built-in profile presets consumable by the web settings UI.
+
+    Returns:
+        A mapping keyed by built-in profile name.  Each value is a mapping of
+        web config color keys (``bar_color``, ``peak_color``,
+        ``history_color``, ``axis_color``, ``label_color``) to CSS hex color
+        strings.
+    """
     presets: dict[str, dict[str, str]] = {}
     for profile_name in list_builtin_profiles():
         profile = load_profile(None, profile_name)
