@@ -261,29 +261,9 @@
   </div>
   <div class="tb-sep"></div>
   <div class="tb-group">
-    <label for="sel-volume">Vol:</label>
-    <select id="sel-volume" title="Volume mode">
-      <option value="relative">Relative</option>
-      <option value="absolute">Absolute</option>
-    </select>
-    <label for="sel-channel">Ch:</label>
-    <select id="sel-channel" title="Channel mode">
-      <option value="sum">Sum</option>
-      <option value="left">Left</option>
-      <option value="right">Right</option>
-      <option value="mid">Mid</option>
-      <option value="side">Side</option>
-      <option value="mono">Mono</option>
-    </select>
-  </div>
-  <div class="tb-sep"></div>
-  <div class="tb-group">
-    <label for="sel-fft">FFT:</label>
-    <select id="sel-fft" title="FFT window size (higher = finer frequency resolution)">
-      <option value="1024">1024</option>
-      <option value="2048">2048</option>
-      <option value="4096" selected>4096</option>
-      <option value="8192">8192</option>
+    <label for="sel-profile">Profile:</label>
+    <select id="sel-profile" title="Built-in profile">
+      <option value="">-- select profile --</option>
     </select>
   </div>
   <div class="tb-sep"></div>
@@ -323,10 +303,12 @@
 
 // ── Default config (overwritten from /config on load, then localStorage) ──────
 var DEFAULT_VERSION = '0.0.0';
+var DEFAULT_HISTORY_FPS = 12;
 
 var CFG = {
   db_min: -80, db_max: 6, db_interval: 10, graph_height: 10,
   band_count: 64, gain_db: 0, volume_mode: 'relative', channel_mode: 'sum',
+  fft_size: 4096, history_fps: DEFAULT_HISTORY_FPS,
   bar_color: '#44cccc', peak_color: '#cc4444',
   history_color: '#44cccc', axis_color: '#666666', label_color: '#aaaaaa',
   show_title: true, title_text: 'eq-cli',
@@ -334,7 +316,7 @@ var CFG = {
   db_marker_style: 'spaced', history_rows: 0,
   history_gradient: ' .:-=+*#%@',
   peak_hold_frames: 0, peak_db_labels: false,
-  axis_frequencies: null, band_gap: 0,
+  axis_frequencies: null, band_gap: 0, profile_name: '',
   app_version: '', profile_presets: {}
 };
 
@@ -365,8 +347,6 @@ function _saveLocalSettings() {
 
 // ── Settings panel ────────────────────────────────────────────────────────────
 function openSettings() {
-  populateProfilePresets();
-
   var colorKeys = ['bar_color', 'peak_color', 'history_color', 'axis_color', 'label_color'];
   colorKeys.forEach(function (k) {
     var el = document.getElementById('cfg-' + k);
@@ -374,7 +354,7 @@ function openSettings() {
   });
 
   var intKeys = ['db_min', 'db_max', 'db_interval', 'graph_height', 'band_count',
-                 'band_gap', 'peak_hold_frames', 'history_rows'];
+                 'band_gap', 'peak_hold_frames', 'history_rows', 'history_fps'];
   intKeys.forEach(function (k) {
     var el = document.getElementById('cfg-' + k);
     if (el) { el.value = CFG[k] !== undefined ? String(CFG[k]) : ''; }
@@ -389,6 +369,13 @@ function openSettings() {
     if (el) { el.value = CFG[k] !== undefined ? CFG[k] : ''; }
   });
 
+  var volumeEl = document.getElementById('cfg-volume_mode');
+  if (volumeEl) { volumeEl.value = CFG.volume_mode || 'relative'; }
+  var channelEl = document.getElementById('cfg-channel_mode');
+  if (channelEl) { channelEl.value = CFG.channel_mode || 'sum'; }
+  var fftEl = document.getElementById('cfg-fft_size');
+  if (fftEl) { fftEl.value = String(CFG.fft_size || 4096); }
+
   var boolKeys = ['peak_db_labels', 'show_title', 'show_axis_labels', 'show_shortcuts'];
   boolKeys.forEach(function (k) {
     var el = document.getElementById('cfg-' + k);
@@ -399,17 +386,15 @@ function openSettings() {
   if (axFreqEl) {
     axFreqEl.value = CFG.axis_frequencies ? CFG.axis_frequencies.join(',') : '';
   }
-  var profileEl = document.getElementById('cfg-profile-preset');
-  if (profileEl) { profileEl.value = ''; }
 
   document.getElementById('settings-overlay').style.display = 'block';
 }
 
 function populateProfilePresets() {
-  var el = document.getElementById('cfg-profile-preset');
+  var el = document.getElementById('sel-profile');
   if (!el) { return; }
   var names = Object.keys(CFG.profile_presets || {}).sort();
-  var selected = el.value || '';
+  var selected = CFG.profile_name || el.value || '';
   el.innerHTML = '<option value="">-- select profile --</option>';
   names.forEach(function (name) {
     var opt = document.createElement('option');
@@ -419,16 +404,18 @@ function populateProfilePresets() {
   });
   if (selected && names.indexOf(selected) !== -1) {
     el.value = selected;
+    CFG.profile_name = selected;
   }
 }
 
 function applyProfilePreset() {
-  var selectEl = document.getElementById('cfg-profile-preset');
+  var selectEl = document.getElementById('sel-profile');
   if (!selectEl || !selectEl.value) { return; }
   var presetMap = CFG.profile_presets || {};
   if (!Object.prototype.hasOwnProperty.call(presetMap, selectEl.value)) { return; }
   var preset = presetMap[selectEl.value];
   if (!preset) { return; }
+  CFG.profile_name = selectEl.value;
 
   ['bar_color', 'peak_color', 'history_color', 'axis_color', 'label_color'].forEach(function (k) {
     if (!(k in preset)) { return; }
@@ -436,6 +423,7 @@ function applyProfilePreset() {
     var inputEl = document.getElementById('cfg-' + k);
     if (inputEl) { inputEl.value = preset[k]; }
   });
+  _saveLocalSettings();
 }
 
 function closeSettings() {
@@ -444,12 +432,14 @@ function closeSettings() {
 
 function applySettings() {
   var intKeys = ['db_min', 'db_max', 'db_interval', 'graph_height', 'band_count',
-                 'band_gap', 'peak_hold_frames', 'history_rows'];
+                 'band_gap', 'peak_hold_frames', 'history_rows', 'history_fps'];
   intKeys.forEach(function (k) {
     var el = document.getElementById('cfg-' + k);
     if (!el) { return; }
     var v = parseInt(el.value, 10);
-    CFG[k] = isNaN(v) ? 0 : v;
+    if (isNaN(v)) { v = 0; }
+    if (k === 'history_fps') { v = Math.max(1, v); }
+    CFG[k] = v;
   });
 
   var gainEl = document.getElementById('cfg-gain_db');
@@ -463,6 +453,16 @@ function applySettings() {
     var el = document.getElementById('cfg-' + k);
     if (el) { CFG[k] = el.value; }
   });
+
+  var volumeEl = document.getElementById('cfg-volume_mode');
+  if (volumeEl) { CFG.volume_mode = volumeEl.value; }
+  var channelEl = document.getElementById('cfg-channel_mode');
+  if (channelEl) { CFG.channel_mode = channelEl.value; }
+  var fftEl = document.getElementById('cfg-fft_size');
+  if (fftEl) {
+    var fftSize = parseInt(fftEl.value, 10);
+    CFG.fft_size = isNaN(fftSize) ? 4096 : fftSize;
+  }
 
   ['peak_db_labels', 'show_title', 'show_axis_labels', 'show_shortcuts'].forEach(function (k) {
     var el = document.getElementById('cfg-' + k);
@@ -484,6 +484,8 @@ function applySettings() {
   ensurePeakArrays();
   resetPeaks();
   historyRows = [];
+  historyLastPushMs = 0;
+  if (analyserNode) { analyserNode.fftSize = getFftSize(); }
   initLayout();
   document.title = CFG.title_text || 'eq-cli';
 }
@@ -491,6 +493,7 @@ function applySettings() {
 function resetSettingsToDefaults() {
   Object.assign(CFG, JSON.parse(JSON.stringify(DEFAULTS)));
   try { localStorage.removeItem('eq-cli-settings'); } catch (e) {}
+  populateProfilePresets();
   openSettings();
 }
 
@@ -501,6 +504,7 @@ var audioCtx = null, analyserNode = null, mediaStream = null;
 var peakLevels = null;      // Float32Array
 var peakHoldCounts = null;  // Int32Array
 var historyRows = [];       // Float32Array[], newest last
+var historyLastPushMs = 0;
 var frozen = false;
 var frozenLevels = null;    // Float32Array cached when frozen
 
@@ -562,7 +566,7 @@ function computeBandLevels(fftData, sampleRate, fftSize) {
 
 function applyVolumeMode(rawLevels) {
   var n = rawLevels.length;
-  var mode = document.getElementById('sel-volume').value;
+  var mode = CFG.volume_mode || 'relative';
   var gain = CFG.gain_db || 0;
   var dbMin = CFG.db_min, dbMax = CFG.db_max;
   var out = new Float32Array(n);
@@ -609,6 +613,11 @@ function resetPeaks() {
 function addHistory(levels) {
   var maxR = CFG.history_rows || 0;
   if (maxR <= 0) { return; }
+  var fps = Math.max(1, Number(CFG.history_fps) || DEFAULT_HISTORY_FPS);
+  var now = performance.now();
+  var intervalMs = 1000 / fps;
+  if (now - historyLastPushMs < intervalMs) { return; }
+  historyLastPushMs = now;
   historyRows.push(Float32Array.from(levels));
   while (historyRows.length > maxR) { historyRows.shift(); }
 }
@@ -921,7 +930,7 @@ async function requestPermissionAndEnumerate() {
 }
 
 function getFftSize() {
-  return parseInt(document.getElementById('sel-fft').value, 10) || 4096;
+  return parseInt(String(CFG.fft_size), 10) || 4096;
 }
 
 async function startAudio(deviceId) {
@@ -951,6 +960,7 @@ async function startAudio(deviceId) {
     ensurePeakArrays();
     resetPeaks();
     historyRows = [];
+    historyLastPushMs = 0;
     frozenLevels = null;
 
     setStatus('Analyzing\u2026', 'ok');
@@ -962,7 +972,7 @@ async function startAudio(deviceId) {
 }
 
 function connectChain(source, analyser) {
-  var mode = document.getElementById('sel-channel').value;
+  var mode = CFG.channel_mode || 'sum';
   if (mode === 'left' || mode === 'right') {
     // Extract a single channel via ChannelSplitterNode
     var splitter = audioCtx.createChannelSplitter(2);
@@ -1042,9 +1052,7 @@ function wireUi() {
 
   document.getElementById('btn-stop').addEventListener('click', stopAudio);
 
-  document.getElementById('sel-fft').addEventListener('change', function () {
-    if (analyserNode) { analyserNode.fftSize = getFftSize(); }
-  });
+  document.getElementById('sel-profile').addEventListener('change', applyProfilePreset);
 
   document.getElementById('btn-freeze').addEventListener('click', function () {
     frozen = !frozen;
@@ -1091,7 +1099,6 @@ function wireUi() {
   document.getElementById('btn-settings-cancel').addEventListener('click', closeSettings);
   document.getElementById('btn-settings-save').addEventListener('click', applySettings);
   document.getElementById('btn-settings-reset').addEventListener('click', resetSettingsToDefaults);
-  document.getElementById('btn-profile-apply').addEventListener('click', applyProfilePreset);
   // Click on the backdrop (not the panel) also closes
   document.getElementById('settings-overlay').addEventListener('click', function (e) {
     if (e.target === this) { closeSettings(); }
@@ -1106,8 +1113,7 @@ async function init() {
   ensurePeakArrays();
 
   document.title = CFG.title_text || 'eq-cli';
-  document.getElementById('sel-volume').value = CFG.volume_mode || 'relative';
-  document.getElementById('sel-channel').value = CFG.channel_mode || 'sum';
+  populateProfilePresets();
 
   initLayout();
   startLoop();
@@ -1138,17 +1144,6 @@ window.addEventListener('DOMContentLoaded', function () {
 
     <div id="settings-grid">
     <div class="settings-section">
-      <div class="settings-section-title">Profiles</div>
-      <div class="settings-row settings-row-profile">
-        <label for="cfg-profile-preset">Built-in profile</label>
-        <select id="cfg-profile-preset">
-          <option value="">-- select profile --</option>
-        </select>
-        <button id="btn-profile-apply" type="button">Apply Colors</button>
-      </div>
-    </div>
-
-    <div class="settings-section">
       <div class="settings-section-title">Colors</div>
       <div class="settings-row"><label for="cfg-bar_color">Bar color</label><input type="color" id="cfg-bar_color"></div>
       <div class="settings-row"><label for="cfg-peak_color">Peak color</label><input type="color" id="cfg-peak_color"></div>
@@ -1175,12 +1170,40 @@ window.addEventListener('DOMContentLoaded', function () {
 
     <div class="settings-section">
       <div class="settings-section-title">Spectrum</div>
+      <div class="settings-row">
+        <label for="cfg-volume_mode">Volume mode</label>
+        <select id="cfg-volume_mode">
+          <option value="relative">Relative</option>
+          <option value="absolute">Absolute</option>
+        </select>
+      </div>
+      <div class="settings-row">
+        <label for="cfg-channel_mode">Channel mode</label>
+        <select id="cfg-channel_mode">
+          <option value="sum">Sum</option>
+          <option value="left">Left</option>
+          <option value="right">Right</option>
+          <option value="mid">Mid</option>
+          <option value="side">Side</option>
+          <option value="mono">Mono</option>
+        </select>
+      </div>
+      <div class="settings-row">
+        <label for="cfg-fft_size">FFT size</label>
+        <select id="cfg-fft_size">
+          <option value="1024">1024</option>
+          <option value="2048">2048</option>
+          <option value="4096">4096</option>
+          <option value="8192">8192</option>
+        </select>
+      </div>
       <div class="settings-row"><label for="cfg-band_count">Band count</label><input type="number" id="cfg-band_count" step="1" min="16" max="256"></div>
       <div class="settings-row"><label for="cfg-gain_db">Gain (dB)</label><input type="number" id="cfg-gain_db" step="0.5"></div>
       <div class="settings-row"><label for="cfg-band_gap">Band gap (px)</label><input type="number" id="cfg-band_gap" step="1" min="0"></div>
       <div class="settings-row"><label for="cfg-peak_hold_frames">Peak hold (frames)</label><input type="number" id="cfg-peak_hold_frames" step="1" min="0"></div>
       <div class="settings-row"><label for="cfg-peak_db_labels">Peak dB labels</label><input type="checkbox" id="cfg-peak_db_labels"></div>
       <div class="settings-row"><label for="cfg-history_rows">History rows (0&nbsp;=&nbsp;off)</label><input type="number" id="cfg-history_rows" step="1" min="0"></div>
+      <div class="settings-row"><label for="cfg-history_fps">History speed (fps)</label><input type="number" id="cfg-history_fps" step="1" min="1"></div>
       <div class="settings-row"><label for="cfg-history_gradient">History gradient chars</label><input type="text" id="cfg-history_gradient"></div>
     </div>
 
