@@ -68,6 +68,37 @@
     #status.err  { color: #f85149; }
     #status.warn { color: #d29922; }
 
+    #version-badge {
+      color: #8b949e;
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    #repo-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: #8b949e;
+      text-decoration: none;
+      font-size: 11px;
+      border: 1px solid #30363d;
+      border-radius: 999px;
+      padding: 2px 8px 2px 4px;
+      background: #21262d;
+    }
+
+    #repo-link:hover {
+      color: #c9d1d9;
+      background: #30363d;
+    }
+
+    #repo-avatar {
+      width: 16px;
+      height: 16px;
+      border-radius: 999px;
+      display: block;
+    }
+
     #canvas-container { flex: 1; position: relative; min-height: 0; }
 
     canvas { display: block; width: 100%; height: 100%; }
@@ -108,8 +139,8 @@
       background: #161b22;
       border: 1px solid #30363d;
       border-radius: 8px;
-      max-width: 500px;
-      margin: 32px auto;
+      width: min(1100px, calc(100vw - 32px));
+      margin: 24px auto;
       padding: 20px 24px;
       font-size: 12px;
     }
@@ -129,7 +160,13 @@
       margin-bottom: 14px;
     }
 
-    .settings-section { margin-bottom: 14px; }
+    #settings-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(320px, 1fr));
+      gap: 14px 20px;
+    }
+
+    .settings-section { margin-bottom: 0; }
 
     .settings-section-title {
       color: #8b949e;
@@ -142,17 +179,16 @@
     }
 
     .settings-row {
-      display: flex;
+      display: grid;
+      grid-template-columns: minmax(140px, 1fr) minmax(140px, 1.3fr);
       align-items: center;
       gap: 8px;
       margin-bottom: 6px;
     }
 
     .settings-row label {
-      flex: 0 0 180px;
       color: #c9d1d9;
       font-size: 11px;
-      white-space: nowrap;
     }
 
     .settings-row input[type="text"],
@@ -179,18 +215,35 @@
     }
 
     .settings-row input[type="checkbox"] {
-      flex: 0 0 auto;
+      justify-self: start;
       cursor: pointer;
       width: 14px;
       height: 14px;
     }
 
+    .settings-row-profile {
+      grid-template-columns: minmax(140px, 1fr) minmax(140px, 1fr) auto;
+    }
+
     #settings-actions {
       display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
       gap: 8px;
       margin-top: 16px;
       padding-top: 12px;
       border-top: 1px solid #21262d;
+    }
+
+    @media (max-width: 920px) {
+      #settings-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 560px) {
+      .settings-row,
+      .settings-row-profile {
+        grid-template-columns: 1fr;
+      }
     }
 
   </style>
@@ -243,6 +296,14 @@
   <div class="tb-group">
     <button id="btn-settings" title="Settings" aria-label="Open settings panel">&#9881; Settings</button>
   </div>
+  <div class="tb-sep"></div>
+  <div class="tb-group">
+    <span id="version-badge" title="eq-cli version">v0.0.0</span>
+    <a id="repo-link" href="https://github.com/astro-derek/eq-cli" target="_blank" rel="noopener noreferrer" title="astro-derek/eq-cli on GitHub">
+      <img id="repo-avatar" src="https://github.com/astro-derek.png" alt="astro-derek avatar">
+      <span>astro-derek/eq-cli</span>
+    </a>
+  </div>
   <span id="status">No device selected</span>
 </div>
 
@@ -271,7 +332,8 @@ var CFG = {
   db_marker_style: 'spaced', history_rows: 0,
   history_gradient: ' .:-=+*#%@',
   peak_hold_frames: 0, peak_db_labels: false,
-  axis_frequencies: null, band_gap: 0
+  axis_frequencies: null, band_gap: 0,
+  app_version: '0.0.0', profile_presets: {}
 };
 
 // Immutable copy of built-in defaults used by "Reset Defaults".
@@ -301,6 +363,8 @@ function _saveLocalSettings() {
 
 // ── Settings panel ────────────────────────────────────────────────────────────
 function openSettings() {
+  populateProfilePresets();
+
   var colorKeys = ['bar_color', 'peak_color', 'history_color', 'axis_color', 'label_color'];
   colorKeys.forEach(function (k) {
     var el = document.getElementById('cfg-' + k);
@@ -333,8 +397,41 @@ function openSettings() {
   if (axFreqEl) {
     axFreqEl.value = CFG.axis_frequencies ? CFG.axis_frequencies.join(',') : '';
   }
+  var profileEl = document.getElementById('cfg-profile-preset');
+  if (profileEl) { profileEl.value = ''; }
 
   document.getElementById('settings-overlay').style.display = 'block';
+}
+
+function populateProfilePresets() {
+  var el = document.getElementById('cfg-profile-preset');
+  if (!el) { return; }
+  var names = Object.keys(CFG.profile_presets || {}).sort();
+  var selected = el.value || '';
+  el.innerHTML = '<option value="">-- select profile --</option>';
+  names.forEach(function (name) {
+    var opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    el.appendChild(opt);
+  });
+  if (selected && names.indexOf(selected) !== -1) {
+    el.value = selected;
+  }
+}
+
+function applyProfilePreset() {
+  var selectEl = document.getElementById('cfg-profile-preset');
+  if (!selectEl || !selectEl.value) { return; }
+  var preset = CFG.profile_presets ? CFG.profile_presets[selectEl.value] : null;
+  if (!preset) { return; }
+
+  ['bar_color', 'peak_color', 'history_color', 'axis_color', 'label_color'].forEach(function (k) {
+    if (!(k in preset)) { return; }
+    CFG[k] = preset[k];
+    var inputEl = document.getElementById('cfg-' + k);
+    if (inputEl) { inputEl.value = preset[k]; }
+  });
 }
 
 function closeSettings() {
@@ -990,6 +1087,7 @@ function wireUi() {
   document.getElementById('btn-settings-cancel').addEventListener('click', closeSettings);
   document.getElementById('btn-settings-save').addEventListener('click', applySettings);
   document.getElementById('btn-settings-reset').addEventListener('click', resetSettingsToDefaults);
+  document.getElementById('btn-profile-apply').addEventListener('click', applyProfilePreset);
   // Click on the backdrop (not the panel) also closes
   document.getElementById('settings-overlay').addEventListener('click', function (e) {
     if (e.target === this) { closeSettings(); }
@@ -999,6 +1097,7 @@ function wireUi() {
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function init() {
   await loadConfig();
+  document.getElementById('version-badge').textContent = 'v' + (CFG.app_version || '0.0.0');
   rebuildBandGeometry();
   ensurePeakArrays();
 
@@ -1032,6 +1131,18 @@ window.addEventListener('DOMContentLoaded', function () {
   <div id="settings-panel">
     <h3>Settings <button id="btn-settings-close" title="Close">&#10005;</button></h3>
     <p class="settings-subtitle">Changes are saved locally in your browser and persist across page loads.</p>
+
+    <div id="settings-grid">
+    <div class="settings-section">
+      <div class="settings-section-title">Profiles</div>
+      <div class="settings-row settings-row-profile">
+        <label for="cfg-profile-preset">Built-in profile</label>
+        <select id="cfg-profile-preset">
+          <option value="">-- select profile --</option>
+        </select>
+        <button id="btn-profile-apply" type="button">Apply Colors</button>
+      </div>
+    </div>
 
     <div class="settings-section">
       <div class="settings-section-title">Colors</div>
@@ -1076,6 +1187,7 @@ window.addEventListener('DOMContentLoaded', function () {
       <div class="settings-row"><label for="cfg-show_axis_labels">Show axis labels</label><input type="checkbox" id="cfg-show_axis_labels"></div>
       <div class="settings-row"><label for="cfg-show_shortcuts">Show shortcuts bar</label><input type="checkbox" id="cfg-show_shortcuts"></div>
       <div class="settings-row"><label for="cfg-axis_frequencies">Axis frequencies (Hz, CSV)</label><input type="text" id="cfg-axis_frequencies" placeholder="20,50,100,200,500,1000,2000,5000,10000,20000"></div>
+    </div>
     </div>
 
     <div id="settings-actions">

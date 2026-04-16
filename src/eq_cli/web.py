@@ -15,7 +15,9 @@ import threading
 from pathlib import Path
 from typing import Any
 
+from eq_cli.app import get_app_version
 from eq_cli.loop import RenderConfig
+from eq_cli.profile import list_builtin_profiles, load_profile, resolve_color_code
 
 _STATIC_DIR = Path(__file__).parent / "static"
 
@@ -92,6 +94,46 @@ def _resolve_graph_height(
     return max(1, row_count)
 
 
+def _profile_color_to_css(color_name: str | None) -> str | None:
+    """Resolve a profile color name to a CSS hex color string."""
+    ansi_code = resolve_color_code(color_name)
+    if ansi_code is None:
+        return None
+    return ansi_to_css(ansi_code)
+
+
+def _build_web_profile_presets() -> dict[str, dict[str, str]]:
+    """Build built-in profile presets consumable by the web settings UI."""
+    presets: dict[str, dict[str, str]] = {}
+    for profile_name in list_builtin_profiles():
+        profile = load_profile(None, profile_name)
+        colors = profile.get("colors")
+        if not isinstance(colors, dict):
+            continue
+
+        bar_color = _profile_color_to_css(colors.get("bar"))
+        peak_color = _profile_color_to_css(colors.get("peak"))
+        history_color = _profile_color_to_css(colors.get("history")) or bar_color
+        axis_color = _profile_color_to_css(colors.get("axis"))
+        label_color = _profile_color_to_css(colors.get("label"))
+
+        preset: dict[str, str] = {}
+        if bar_color is not None:
+            preset["bar_color"] = bar_color
+        if peak_color is not None:
+            preset["peak_color"] = peak_color
+        if history_color is not None:
+            preset["history_color"] = history_color
+        if axis_color is not None:
+            preset["axis_color"] = axis_color
+        if label_color is not None:
+            preset["label_color"] = label_color
+
+        if preset:
+            presets[profile_name] = preset
+    return presets
+
+
 def build_web_config(config: RenderConfig) -> dict[str, Any]:
     """Build a JSON-serialisable display configuration dict for the web UI.
 
@@ -140,6 +182,8 @@ def build_web_config(config: RenderConfig) -> dict[str, Any]:
             list(config.axis_frequencies) if config.axis_frequencies else None
         ),
         "band_gap": config.band_gap,
+        "app_version": get_app_version(),
+        "profile_presets": _build_web_profile_presets(),
     }
 
 

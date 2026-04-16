@@ -61,6 +61,7 @@ def test_build_web_config_has_required_keys() -> None:
         "bar_color", "peak_color", "history_color", "axis_color", "label_color",
         "show_title", "title_text", "show_axis_labels", "show_shortcuts",
         "db_marker_style", "history_rows", "peak_hold_frames",
+        "app_version", "profile_presets",
     }
     missing = required - cfg.keys()
     assert not missing, f"Missing config keys: {missing}"
@@ -126,6 +127,23 @@ def test_build_web_config_axis_frequencies_serialised() -> None:
     assert cfg["axis_frequencies"] == [100.0, 1000.0, 10000.0]
 
 
+def test_build_web_config_exposes_profile_presets() -> None:
+    """Built-in profile presets should be exported for the web settings panel."""
+    cfg = build_web_config(RenderConfig())
+    presets = cfg["profile_presets"]
+    assert isinstance(presets, dict)
+    assert "studio" in presets
+    assert "bar_color" in presets["studio"]
+    assert "peak_color" in presets["studio"]
+
+
+def test_build_web_config_app_version_present() -> None:
+    """The app version exposed to the browser should be a non-empty string."""
+    cfg = build_web_config(RenderConfig())
+    assert isinstance(cfg["app_version"], str)
+    assert cfg["app_version"] != ""
+
+
 # ── WebServer lifecycle ───────────────────────────────────────────────────────
 
 
@@ -184,6 +202,9 @@ def test_web_server_serves_index_html() -> None:
             html = resp.read().decode()
         assert "<canvas" in html
         assert "eq-cli" in html
+        assert 'id="version-badge"' in html
+        assert 'id="repo-link"' in html
+        assert 'id="cfg-profile-preset"' in html
     finally:
         server.stop()
 
