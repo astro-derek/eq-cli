@@ -74,11 +74,22 @@ jobs:
             }
           }
 
-          if aws s3api head-bucket --bucket "$TF_VAR_bucket_name" >/dev/null 2>&1; then
+          set +e
+          BUCKET_CHECK_OUTPUT=$(aws s3api head-bucket --bucket "$TF_VAR_bucket_name" 2>&1)
+          BUCKET_CHECK_STATUS=$?
+          set -e
+
+          if [ "$BUCKET_CHECK_STATUS" -eq 0 ]; then
             tf_import_if_missing "aws_s3_bucket.site" "$TF_VAR_bucket_name"
             tf_import_if_missing "aws_s3_bucket_public_access_block.site" "$TF_VAR_bucket_name"
             tf_import_if_missing "aws_s3_bucket_versioning.site" "$TF_VAR_bucket_name"
             tf_import_if_missing "aws_s3_bucket_policy.site" "$TF_VAR_bucket_name"
+          elif echo "$BUCKET_CHECK_OUTPUT" | grep -Eq "(404|Not Found|NoSuchBucket)"; then
+            echo "S3 bucket ${TF_VAR_bucket_name} does not exist yet; skipping bucket imports."
+          else
+            echo "Failed to check S3 bucket ${TF_VAR_bucket_name}:"
+            echo "$BUCKET_CHECK_OUTPUT"
+            exit 1
           fi
 
           OAC_ID=$(
