@@ -64,6 +64,7 @@ resource "aws_cloudfront_distribution" "site" {
   default_root_object = "index.html"
   price_class         = var.price_class
   comment             = "eq-cli static site"
+  aliases             = var.cloudfront_aliases
 
   origin {
     domain_name              = aws_s3_bucket.site.bucket_regional_domain_name
@@ -95,11 +96,9 @@ resource "aws_cloudfront_distribution" "site" {
   }
 
   viewer_certificate {
-    cloudfront_default_certificate = true
-    # To use a custom domain + ACM certificate, replace the line above with:
-    # acm_certificate_arn      = "<your-acm-cert-arn>"
-    # ssl_support_method       = "sni-only"
-    # minimum_protocol_version = "TLSv1.2_2021"
+    acm_certificate_arn        = "arn:aws:acm:us-east-1:577995597404:certificate/9c3dc3ef-4802-453d-ba48-c6185f8e0821"
+    ssl_support_method         = "sni-only"
+    minimum_protocol_version   = "TLSv1.2_2021"
   }
 }
 

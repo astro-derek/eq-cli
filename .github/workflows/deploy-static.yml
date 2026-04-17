@@ -23,12 +23,40 @@ jobs:
     runs-on: ubuntu-latest
     # Only deploy from the main branch to prevent accidental deletion via --delete.
     if: github.ref == 'refs/heads/main'
+    env:
+      TF_IN_AUTOMATION: true
+      TF_VAR_bucket_name: ${{ secrets.S3_BUCKET_NAME }}
+      TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
+      TF_VAR_cloudfront_aliases: ${{ vars.CLOUDFRONT_ALIASES_JSON || '[]' }}
+      TF_VAR_github_repo: ${{ vars.GITHUB_REPO || '' }}
+      TF_VAR_github_oidc_provider_arn: ${{ vars.GITHUB_OIDC_PROVIDER_ARN || '' }}
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Configure AWS credentials (OIDC)
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Configure AWS credentials for Terraform (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_TERRAFORM_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - name: Terraform init
+        run: terraform -chdir=terraform init -input=false
+
+      - name: Terraform apply
+        run: terraform -chdir=terraform apply -auto-approve -input=false
+
+      - name: Export deploy targets from Terraform outputs
+        run: |
+          echo "DEPLOY_BUCKET_NAME=$(terraform -chdir=terraform output -raw bucket_name)" >> "$GITHUB_ENV"
+          echo "DEPLOY_DISTRIBUTION_ID=$(terraform -chdir=terraform output -raw cloudfront_distribution_id)" >> "$GITHUB_ENV"
+          echo "DEPLOY_CLOUDFRONT_DOMAIN=$(terraform -chdir=terraform output -raw cloudfront_domain)" >> "$GITHUB_ENV"
+
+      - name: Configure AWS credentials for static deploy (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
@@ -68,15 +96,16 @@ jobs:
           )
           PY
           aws s3 sync "${STATIC_BUILD_DIR}/" s3://${{ secrets.S3_BUCKET_NAME }}/ \
+          aws s3 sync "${STATIC_BUILD_DIR}/" s3://$DEPLOY_BUCKET_NAME/ \
             --delete \
             --cache-control "public,max-age=3600,s-maxage=86400"
 
       - name: Invalidate CloudFront cache
         run: |
           aws cloudfront create-invalidation \
-            --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --distribution-id "$DEPLOY_DISTRIBUTION_ID" \
             --paths "/*"
 
       - name: Print deployment URL
         run: |
-          echo "Deployed to: https://${{ vars.CLOUDFRONT_DOMAIN }}"
+          echo "Deployed to: https://$DEPLOY_CLOUDFRONT_DOMAIN"

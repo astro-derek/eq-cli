@@ -124,18 +124,24 @@ In your GitHub repository go to **Settings → Secrets and variables → Actions
 
 | Secret name | Value |
 |-------------|-------|
+| `AWS_TERRAFORM_ROLE_ARN` | IAM role ARN with permissions to run `terraform apply` for this stack |
 | `AWS_DEPLOY_ROLE_ARN` | Value of the `github_deploy_role_arn` Terraform output |
 | `S3_BUCKET_NAME` | Value of the `bucket_name` Terraform output |
-| `CLOUDFRONT_DISTRIBUTION_ID` | Value of the `cloudfront_distribution_id` Terraform output |
 
 ### Variables (not secrets)
 
 | Variable name | Value |
 |---------------|-------|
 | `AWS_REGION` | e.g. `us-east-1` |
-| `CLOUDFRONT_DOMAIN` | Value of the `cloudfront_domain` Terraform output |
+| `CLOUDFRONT_ALIASES_JSON` | JSON list for Terraform `cloudfront_aliases`, e.g. `[]` or `["eq.example.com"]` |
+| `GITHUB_REPO` | Repository in `owner/repo` format (used by Terraform IAM OIDC resources), e.g. `acme/eq-cli` |
+| `GITHUB_OIDC_PROVIDER_ARN` | ARN of the GitHub OIDC provider in AWS, e.g. `arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com` |
 
-After this, every push to `main` that changes a file under `src/eq_cli/static/` will automatically sync to S3 and invalidate the CloudFront cache via the `.github/workflows/deploy-static.yml` workflow.
+After this, every push to `main` that changes a file under `src/eq_cli/static/` will:
+
+1. Run `terraform apply` with `cloudfront_aliases` sourced from `CLOUDFRONT_ALIASES_JSON`.
+2. Read bucket/distribution/domain from Terraform outputs.
+3. Sync static assets to S3 and invalidate CloudFront.
 
 You can also trigger a manual deployment from **Actions → Deploy Static Site → Run workflow**.
 

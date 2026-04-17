@@ -20,6 +20,12 @@ variable "price_class" {
   }
 }
 
+variable "cloudfront_aliases" {
+  description = "Optional custom domain names (CNAMEs) for CloudFront, for example [\"eq.example.com\"]."
+  type        = list(string)
+  default     = []
+}
+
 variable "github_repo" {
   description = "GitHub repository in 'owner/repo' format used to scope the OIDC deploy role (e.g. 'acme/eq-cli'). Leave empty to skip IAM role creation."
   type        = string
