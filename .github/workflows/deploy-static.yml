@@ -7,6 +7,11 @@ on:
     paths:
       - "src/eq_cli/static/**"
       - "pyproject.toml"
+  workflow_run:
+    workflows:
+      - "Auto Bump Version"
+    types:
+      - completed
   workflow_dispatch:
     inputs:
       environment:
@@ -22,7 +27,11 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     # Only deploy from the main branch to prevent accidental deletion via --delete.
-    if: github.ref == 'refs/heads/main'
+    if: >
+      (github.event_name != 'workflow_run' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main')
     env:
       TF_IN_AUTOMATION: true
       TF_VAR_bucket_name: ${{ secrets.S3_BUCKET_NAME }}
@@ -30,10 +39,25 @@ jobs:
       TF_VAR_cloudfront_aliases: ${{ vars.CLOUDFRONT_ALIASES_JSON || '[]' }}
       TF_VAR_github_repo: ${{ vars.GITHUB_REPO || '' }}
       TF_VAR_github_oidc_provider_arn: ${{ vars.GITHUB_OIDC_PROVIDER_ARN || '' }}
+      AWS_TERRAFORM_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_ROLE_ARN || vars.AWS_TERRAFORM_ROLE_ARN || '' }}
+      AWS_DEPLOY_ROLE_ARN: ${{ secrets.AWS_DEPLOY_ROLE_ARN || vars.AWS_DEPLOY_ROLE_ARN || '' }}
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Validate deploy role configuration
+        run: |
+          if [ -z "$AWS_TERRAFORM_ROLE_ARN" ]; then
+            echo "Missing AWS_TERRAFORM_ROLE_ARN in repository secrets or variables."
+            exit 1
+          fi
+          if [ -z "$AWS_DEPLOY_ROLE_ARN" ]; then
+            echo "Missing AWS_DEPLOY_ROLE_ARN in repository secrets or variables."
+            exit 1
+          fi
 
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v3
@@ -41,7 +65,7 @@ jobs:
       - name: Configure AWS credentials for Terraform (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_TERRAFORM_ROLE_ARN }}
+          role-to-assume: ${{ env.AWS_TERRAFORM_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
 
       - name: Terraform init
@@ -59,7 +83,7 @@ jobs:
       - name: Configure AWS credentials for static deploy (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          role-to-assume: ${{ env.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
 
       - name: Sync static files to S3
