@@ -137,11 +137,15 @@ In your GitHub repository go to **Settings → Secrets and variables → Actions
 | `GITHUB_REPO` | Repository in `owner/repo` format (used by Terraform IAM OIDC resources), e.g. `acme/eq-cli` |
 | `GITHUB_OIDC_PROVIDER_ARN` | ARN of the GitHub OIDC provider in AWS, e.g. `arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com` |
 
-After this, every push to `main` that changes a file under `src/eq_cli/static/` will:
+After this, every push to `main` that changes a file under `src/eq_cli/static/`
+or `pyproject.toml` will:
 
 1. Run `terraform apply` with `cloudfront_aliases` sourced from `CLOUDFRONT_ALIASES_JSON`.
 2. Read bucket/distribution/domain from Terraform outputs.
 3. Sync static assets to S3 and invalidate CloudFront.
+
+The deployment workflow also runs automatically after a successful
+`Auto Bump Version` workflow run on `main`.
 
 You can also trigger a manual deployment from **Actions → Deploy Static Site → Run workflow**.
 
