@@ -171,5 +171,5 @@ To reset to defaults, open the settings panel and click **Reset Defaults**.
 | Symptom | Fix |
 |---------|-----|
 | `403 Forbidden` from CloudFront | Wait a few minutes after first deploy; S3 bucket policy propagates asynchronously. |
-| Old version still showing | CloudFront cache. Run `aws cloudfront create-invalidation --distribution-id <id> --paths "/*"` or trigger the deploy workflow. |
+| Old version still showing | Hard-refresh your browser first (index.html is now deployed with `no-cache`), then if needed run `aws cloudfront create-invalidation --distribution-id <id> --paths "/*"` or trigger the deploy workflow. |
 | GitHub Actions: `Error: Could not assume role` | Verify `AWS_DEPLOY_ROLE_ARN`, the OIDC provider ARN, and that `github_repo` in `terraform.tfvars` matches your repository exactly. |
