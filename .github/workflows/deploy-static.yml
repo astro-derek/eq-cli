@@ -62,6 +62,11 @@ jobs:
 
       - name: Import existing Terraform resources (if present)
         run: |
+          if [ -z "$TF_VAR_bucket_name" ]; then
+            echo "Missing TF_VAR_bucket_name; cannot import existing Terraform resources."
+            exit 1
+          fi
+
           tf_import_if_missing() {
             local address="$1"
             local import_id="$2"
@@ -145,12 +150,13 @@ jobs:
           fi
 
           if [ -n "$TF_VAR_github_repo" ] && [ -n "$TF_VAR_github_oidc_provider_arn" ]; then
+            ROLE_POLICY_NAME="deploy"
             ROLE_NAME="${TF_VAR_bucket_name//./-}-github-deploy"
             if aws iam get-role --role-name "$ROLE_NAME" >/dev/null 2>&1; then
               tf_import_if_missing "aws_iam_role.github_deploy[0]" "$ROLE_NAME"
             fi
-            if aws iam get-role-policy --role-name "$ROLE_NAME" --policy-name deploy >/dev/null 2>&1; then
-              tf_import_if_missing "aws_iam_role_policy.github_deploy[0]" "${ROLE_NAME}:deploy"
+            if aws iam get-role-policy --role-name "$ROLE_NAME" --policy-name "$ROLE_POLICY_NAME" >/dev/null 2>&1; then
+              tf_import_if_missing "aws_iam_role_policy.github_deploy[0]" "${ROLE_NAME}:${ROLE_POLICY_NAME}"
             fi
           fi
 
