@@ -68,7 +68,10 @@ jobs:
             if terraform -chdir=terraform state show "$address" >/dev/null 2>&1; then
               return 0
             fi
-            terraform -chdir=terraform import -input=false "$address" "$import_id"
+            terraform -chdir=terraform import -input=false "$address" "$import_id" || {
+              echo "Failed to import ${address} with id ${import_id}"
+              return 1
+            }
           }
 
           if aws s3api head-bucket --bucket "$TF_VAR_bucket_name" >/dev/null 2>&1; then
@@ -88,9 +91,27 @@ jobs:
           fi
 
           DISTRIBUTION_ID=$(
-            aws cloudfront list-distributions \
-              --query "DistributionList.Items[?Comment=='eq-cli static site' && contains(Origins.Items[0].DomainName, '${TF_VAR_bucket_name}.s3')].Id | [0]" \
-              --output text 2>/dev/null || true
+            python - <<'PY'
+            import json
+            import os
+            import subprocess
+
+            bucket_name = os.environ["TF_VAR_bucket_name"]
+            result = subprocess.run(
+                ["aws", "cloudfront", "list-distributions", "--output", "json"],
+                capture_output=True,
+                check=True,
+                text=True,
+            )
+            distributions = json.loads(result.stdout).get("DistributionList", {}).get("Items", [])
+            for distribution in distributions:
+                if distribution.get("Comment") != "eq-cli static site":
+                    continue
+                origins = distribution.get("Origins", {}).get("Items", [])
+                if any(f"{bucket_name}.s3" in origin.get("DomainName", "") for origin in origins):
+                    print(distribution.get("Id", ""))
+                    break
+            PY
           )
           if [ -n "$DISTRIBUTION_ID" ] && [ "$DISTRIBUTION_ID" != "None" ]; then
             tf_import_if_missing "aws_cloudfront_distribution.site" "$DISTRIBUTION_ID"
