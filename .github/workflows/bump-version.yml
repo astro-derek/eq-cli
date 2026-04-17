@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   bump-version:
@@ -62,13 +63,28 @@ jobs:
           echo "new_version=${new_version}" >> "$GITHUB_OUTPUT"
 
       - name: Commit and push bumped version
+        id: push_bump
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           if git diff --quiet -- pyproject.toml; then
             echo "No version changes detected; skipping commit."
+            echo "pushed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           git add pyproject.toml
           git commit -m "chore: bump version to v${{ steps.bump.outputs.new_version }}"
           git push
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Trigger static deploy workflow
+        if: steps.push_bump.outputs.pushed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          curl --fail --silent --show-error \
+            -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/deploy-static.yml/dispatches" \
+            -d '{"ref":"main"}'
