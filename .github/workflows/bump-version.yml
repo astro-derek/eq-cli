@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  # Required to dispatch the Deploy Static Site workflow after version bumps.
   actions: write
 
 jobs:

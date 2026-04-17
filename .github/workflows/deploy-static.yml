@@ -40,11 +40,11 @@ jobs:
       - name: Validate deploy role configuration
         run: |
           if [ -z "$AWS_TERRAFORM_ROLE_ARN" ]; then
-            echo "Missing AWS_TERRAFORM_ROLE_ARN in repository secrets or variables."
+            echo "Missing AWS_TERRAFORM_ROLE_ARN. Set it as a repository secret or variable in Settings -> Secrets and variables -> Actions."
             exit 1
           fi
           if [ -z "$AWS_DEPLOY_ROLE_ARN" ]; then
-            echo "Missing AWS_DEPLOY_ROLE_ARN in repository secrets or variables."
+            echo "Missing AWS_DEPLOY_ROLE_ARN. Set it as a repository secret or variable in Settings -> Secrets and variables -> Actions."
             exit 1
           fi
 
