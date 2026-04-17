@@ -83,7 +83,105 @@ tags = {
 
 ---
 
-## Step 3 — Apply Terraform
+## Step 3 — Create the Terraform IAM role
+
+The GitHub Actions workflow runs `terraform apply` before it can upload any
+files, so it needs an IAM role it can assume via OIDC.  This role must be
+created **manually** (Terraform cannot create its own bootstrap role).
+
+### 3a — Write the trust policy
+
+Replace `<account-id>`, `<owner>`, and `<repo>` with your values, then save
+the file as `/tmp/terraform-trust-policy.json`:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Federated": "arn:aws:iam::<account-id>:oidc-provider/token.actions.githubusercontent.com"
+      },
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": {
+          "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
+        },
+        "StringLike": {
+          "token.actions.githubusercontent.com:sub": "repo:<owner>/<repo>:ref:refs/heads/main"
+        }
+      }
+    }
+  ]
+}
+```
+
+### 3b — Write the permissions policy
+
+The role needs to manage the S3 bucket, CloudFront distribution, and the
+scoped deploy IAM role that Terraform creates.  Save the following as
+`/tmp/terraform-permissions-policy.json`:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "S3",
+      "Effect": "Allow",
+      "Action": ["s3:*"],
+      "Resource": ["arn:aws:s3:::*"]
+    },
+    {
+      "Sid": "CloudFront",
+      "Effect": "Allow",
+      "Action": ["cloudfront:*"],
+      "Resource": ["*"]
+    },
+    {
+      "Sid": "IAM",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:GetRole",
+        "iam:PutRolePolicy",
+        "iam:GetRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:ListRolePolicies",
+        "iam:ListAttachedRolePolicies",
+        "iam:TagRole",
+        "iam:UntagRole",
+        "iam:ListInstanceProfilesForRole",
+        "iam:PassRole"
+      ],
+      "Resource": ["arn:aws:iam::*:role/*"]
+    }
+  ]
+}
+```
+
+### 3c — Create the role
+
+```bash
+aws iam create-role \
+  --role-name eq-cli-terraform \
+  --assume-role-policy-document file:///tmp/terraform-trust-policy.json
+
+aws iam put-role-policy \
+  --role-name eq-cli-terraform \
+  --policy-name TerraformDeploy \
+  --policy-document file:///tmp/terraform-permissions-policy.json
+```
+
+Note the `Arn` value from the `create-role` output (format:
+`arn:aws:iam::<account-id>:role/eq-cli-terraform`).  You will need it in
+Step 6.
+
+---
+
+## Step 4 — Apply Terraform
 
 ```bash
 cd terraform
@@ -103,11 +201,20 @@ After `apply` completes, note the outputs:
 
 ---
 
-## Step 4 — Upload the static file (first deploy)
+## Step 5 — Upload the static file (first deploy)
 
 ```bash
-aws s3 sync src/eq_cli/static/ s3://$(terraform -chdir=terraform output -raw bucket_name)/ \
+BUCKET=$(terraform -chdir=terraform output -raw bucket_name)
+
+# Sync all files except index.html (long-lived cache)
+aws s3 sync src/eq_cli/static/ "s3://$BUCKET/" \
+  --delete \
+  --exclude "index.html" \
   --cache-control "public,max-age=3600,s-maxage=86400"
+
+# Upload index.html separately so browsers always fetch the latest version
+aws s3 cp src/eq_cli/static/index.html "s3://$BUCKET/index.html" \
+  --cache-control "no-cache,must-revalidate"
 ```
 
 Then open `https://$(terraform -chdir=terraform output -raw cloudfront_domain)` in your browser.
@@ -116,7 +223,7 @@ Then open `https://$(terraform -chdir=terraform output -raw cloudfront_domain)` 
 
 ---
 
-## Step 5 — Set up GitHub Actions secrets and variables
+## Step 6 — Set up GitHub Actions secrets and variables
 
 In your GitHub repository go to **Settings → Secrets and variables → Actions** and add:
 
@@ -124,9 +231,9 @@ In your GitHub repository go to **Settings → Secrets and variables → Actions
 
 | Secret name | Value |
 |-------------|-------|
-| `AWS_TERRAFORM_ROLE_ARN` | IAM role ARN with permissions to run `terraform apply` for this stack |
-| `AWS_DEPLOY_ROLE_ARN` | Value of the `github_deploy_role_arn` Terraform output |
-| `S3_BUCKET_NAME` | Value of the `bucket_name` Terraform output |
+| `AWS_TERRAFORM_ROLE_ARN` | ARN of the role created in Step 3 (e.g. `arn:aws:iam::<account-id>:role/eq-cli-terraform`) |
+| `AWS_DEPLOY_ROLE_ARN` | Value of the `github_deploy_role_arn` Terraform output (from Step 4) |
+| `S3_BUCKET_NAME` | Value of the `bucket_name` Terraform output (from Step 4) |
 
 ### Variables (not secrets)
 
@@ -140,9 +247,9 @@ In your GitHub repository go to **Settings → Secrets and variables → Actions
 After this, every push to `main` that changes a file under `src/eq_cli/static/`
 or `pyproject.toml` will:
 
-1. Run `terraform apply` with `cloudfront_aliases` sourced from `CLOUDFRONT_ALIASES_JSON`.
+1. Assume `AWS_TERRAFORM_ROLE_ARN` and run `terraform apply` (provisioning/updating the S3 bucket and CloudFront distribution).
 2. Read bucket/distribution/domain from Terraform outputs.
-3. Sync static assets to S3 and invalidate CloudFront.
+3. Assume `AWS_DEPLOY_ROLE_ARN` and sync static assets to S3, then invalidate CloudFront.
 
 The deployment workflow also runs automatically after a successful
 `Auto Bump Version` workflow run on `main`.
@@ -175,5 +282,6 @@ To reset to defaults, open the settings panel and click **Reset Defaults**.
 | Symptom | Fix |
 |---------|-----|
 | `403 Forbidden` from CloudFront | Wait a few minutes after first deploy; S3 bucket policy propagates asynchronously. |
-| Old version still showing | Hard-refresh your browser first (index.html is now deployed with `no-cache`), then if needed run `aws cloudfront create-invalidation --distribution-id <id> --paths "/*"` or trigger the deploy workflow. |
-| GitHub Actions: `Error: Could not assume role` | Verify `AWS_DEPLOY_ROLE_ARN`, the OIDC provider ARN, and that `github_repo` in `terraform.tfvars` matches your repository exactly. |
+| Old version still showing | Hard-refresh your browser first (index.html is deployed with `no-cache`), then if needed run `aws cloudfront create-invalidation --distribution-id <id> --paths "/*"` or trigger the deploy workflow. |
+| GitHub Actions: `Missing AWS_TERRAFORM_ROLE_ARN` | Create the Terraform IAM role following Step 3 and add its ARN as the `AWS_TERRAFORM_ROLE_ARN` secret/variable in **Settings → Secrets and variables → Actions**. |
+| GitHub Actions: `Error: Could not assume role` | Verify both `AWS_TERRAFORM_ROLE_ARN` and `AWS_DEPLOY_ROLE_ARN` are set correctly.  Confirm the OIDC provider ARN is correct and that `github_repo` in `terraform.tfvars` (and the `GITHUB_REPO` variable) matches your repository exactly. |
