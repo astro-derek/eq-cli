@@ -100,7 +100,7 @@ jobs:
             --exclude "index.html" \
             --cache-control "public,max-age=3600,s-maxage=86400"
           aws s3 cp "${STATIC_BUILD_DIR}/index.html" "s3://$DEPLOY_BUCKET_NAME/index.html" \
-            --cache-control "no-cache,no-store,must-revalidate"
+            --cache-control "no-cache,must-revalidate"
 
       - name: Invalidate CloudFront cache
         run: |
