@@ -101,6 +101,7 @@ jobs:
             tf_import_if_missing "aws_cloudfront_origin_access_control.site" "$OAC_ID"
           fi
 
+          export DISTRIBUTION_COMMENT="eq-cli static site"
           DISTRIBUTION_ID=$(
             python - <<'PY'
             import json
@@ -108,15 +109,30 @@ jobs:
             import subprocess
 
             bucket_name = os.environ["TF_VAR_bucket_name"]
-            result = subprocess.run(
-                ["aws", "cloudfront", "list-distributions", "--output", "json"],
-                capture_output=True,
-                check=True,
-                text=True,
-            )
-            distributions = json.loads(result.stdout).get("DistributionList", {}).get("Items", [])
+            distribution_comment = os.environ["DISTRIBUTION_COMMENT"]
+            try:
+                result = subprocess.run(
+                    ["aws", "cloudfront", "list-distributions", "--output", "json"],
+                    capture_output=True,
+                    check=True,
+                    text=True,
+                )
+            except subprocess.CalledProcessError as error:
+                details = error.stderr.strip() if error.stderr else str(error)
+                raise SystemExit(
+                    f"Failed to list CloudFront distributions: {details}"
+                ) from error
+
+            try:
+                payload = json.loads(result.stdout)
+            except json.JSONDecodeError as error:
+                raise SystemExit(
+                    f"Invalid CloudFront list-distributions response: {error}"
+                ) from error
+
+            distributions = payload.get("DistributionList", {}).get("Items", [])
             for distribution in distributions:
-                if distribution.get("Comment") != "eq-cli static site":
+                if distribution.get("Comment") != distribution_comment:
                     continue
                 origins = distribution.get("Origins", {}).get("Items", [])
                 if any(f"{bucket_name}.s3" in origin.get("DomainName", "") for origin in origins):
