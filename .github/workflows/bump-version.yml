@@ -81,7 +81,7 @@ jobs:
       - name: Trigger static deploy workflow
         if: steps.push_bump.outputs.pushed == 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           gh api \
             --method POST \
