@@ -60,6 +60,52 @@ jobs:
       - name: Terraform init
         run: terraform -chdir=terraform init -input=false
 
+      - name: Import existing Terraform resources (if present)
+        run: |
+          tf_import_if_missing() {
+            local address="$1"
+            local import_id="$2"
+            if terraform -chdir=terraform state show "$address" >/dev/null 2>&1; then
+              return 0
+            fi
+            terraform -chdir=terraform import -input=false "$address" "$import_id"
+          }
+
+          if aws s3api head-bucket --bucket "$TF_VAR_bucket_name" >/dev/null 2>&1; then
+            tf_import_if_missing "aws_s3_bucket.site" "$TF_VAR_bucket_name"
+            tf_import_if_missing "aws_s3_bucket_public_access_block.site" "$TF_VAR_bucket_name"
+            tf_import_if_missing "aws_s3_bucket_versioning.site" "$TF_VAR_bucket_name"
+            tf_import_if_missing "aws_s3_bucket_policy.site" "$TF_VAR_bucket_name"
+          fi
+
+          OAC_ID=$(
+            aws cloudfront list-origin-access-controls \
+              --query "OriginAccessControlList.Items[?Name=='${TF_VAR_bucket_name}-oac'].Id | [0]" \
+              --output text 2>/dev/null || true
+          )
+          if [ -n "$OAC_ID" ] && [ "$OAC_ID" != "None" ]; then
+            tf_import_if_missing "aws_cloudfront_origin_access_control.site" "$OAC_ID"
+          fi
+
+          DISTRIBUTION_ID=$(
+            aws cloudfront list-distributions \
+              --query "DistributionList.Items[?Comment=='eq-cli static site' && contains(Origins.Items[0].DomainName, '${TF_VAR_bucket_name}.s3')].Id | [0]" \
+              --output text 2>/dev/null || true
+          )
+          if [ -n "$DISTRIBUTION_ID" ] && [ "$DISTRIBUTION_ID" != "None" ]; then
+            tf_import_if_missing "aws_cloudfront_distribution.site" "$DISTRIBUTION_ID"
+          fi
+
+          if [ -n "$TF_VAR_github_repo" ] && [ -n "$TF_VAR_github_oidc_provider_arn" ]; then
+            ROLE_NAME="${TF_VAR_bucket_name//./-}-github-deploy"
+            if aws iam get-role --role-name "$ROLE_NAME" >/dev/null 2>&1; then
+              tf_import_if_missing "aws_iam_role.github_deploy[0]" "$ROLE_NAME"
+            fi
+            if aws iam get-role-policy --role-name "$ROLE_NAME" --policy-name deploy >/dev/null 2>&1; then
+              tf_import_if_missing "aws_iam_role_policy.github_deploy[0]" "${ROLE_NAME}:deploy"
+            fi
+          fi
+
       - name: Terraform apply
         run: terraform -chdir=terraform apply -auto-approve -input=false
 
