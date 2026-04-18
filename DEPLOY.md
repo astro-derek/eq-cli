@@ -217,6 +217,17 @@ aws s3 cp src/eq_cli/static/index.html "s3://$BUCKET/index.html" \
   --cache-control "no-cache,must-revalidate"
 ```
 
+The automated workflow also publishes versioned pages under `/versions/` and
+retains:
+
+- every release in the current major line
+- only the latest release for each previous major line
+
+Example URLs:
+
+- `https://<cloudfront-domain>/versions/v1.0.0/`
+- `https://<cloudfront-domain>/versions/index.json`
+
 Then open `https://$(terraform -chdir=terraform output -raw cloudfront_domain)` in your browser.
 
 > **Note:** CloudFront can take a few minutes to fully propagate the first time.
@@ -249,7 +260,9 @@ or `pyproject.toml` will:
 
 1. Assume `AWS_TERRAFORM_ROLE_ARN` and run `terraform apply` (provisioning/updating the S3 bucket and CloudFront distribution).
 2. Read bucket/distribution/domain from Terraform outputs.
-3. Assume `AWS_DEPLOY_ROLE_ARN` and sync static assets to S3, then invalidate CloudFront.
+3. Assume `AWS_DEPLOY_ROLE_ARN`, sync static assets, publish retained
+   `/versions/v<version>/` pages, and upload `/versions/index.json`.
+4. Invalidate CloudFront.
 
 The deployment workflow also runs automatically after a successful
 `Auto Bump Version` workflow run on `main`.
