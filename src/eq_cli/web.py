@@ -230,6 +230,7 @@ def _make_handler_class(
 
         def do_GET(self) -> None:
             """Dispatch GET requests to the page or config endpoints."""
+            # Match only the URL path so query strings do not affect routing.
             request_path = urllib.parse.urlparse(self.path).path
             if request_path in {"/", "/index.html"}:
                 self._serve_file("index.html", "text/html; charset=utf-8")
@@ -244,6 +245,7 @@ def _make_handler_class(
             """Read and send a static file from the package static directory."""
             static_dir = _STATIC_DIR.resolve()
             file_path = (static_dir / filename).resolve()
+            # Resolve + is_relative_to prevents traversal outside static_dir.
             if not file_path.is_relative_to(static_dir) or not file_path.is_file():
                 self.send_error(404)
                 return
