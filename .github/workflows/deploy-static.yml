@@ -176,6 +176,8 @@ jobs:
           aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
 
       - name: Sync static files to S3
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           VERSION=$(
           python - <<'PY'
