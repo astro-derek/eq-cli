@@ -12,6 +12,7 @@ import json
 import math
 import re
 import threading
+import urllib.parse
 from pathlib import Path
 from typing import Any
 
@@ -229,17 +230,23 @@ def _make_handler_class(
 
         def do_GET(self) -> None:
             """Dispatch GET requests to the page or config endpoints."""
-            if self.path in {"/", "/index.html"}:
+            # Match only the URL path so query strings do not affect routing.
+            request_path = urllib.parse.urlparse(self.path).path
+            if request_path in {"/", "/index.html"}:
                 self._serve_file("index.html", "text/html; charset=utf-8")
-            elif self.path == "/config":
+            elif request_path == "/favicon.svg":
+                self._serve_file("favicon.svg", "image/svg+xml")
+            elif request_path == "/config":
                 self._send_json(config_data)
             else:
                 self.send_error(404)
 
         def _serve_file(self, filename: str, content_type: str) -> None:
             """Read and send a static file from the package static directory."""
-            file_path = _STATIC_DIR / filename
-            if not file_path.exists():
+            static_dir = _STATIC_DIR.resolve()
+            file_path = (static_dir / filename).resolve()
+            # Resolve + is_relative_to prevents traversal outside static_dir.
+            if not file_path.is_relative_to(static_dir) or not file_path.is_file():
                 self.send_error(404)
                 return
             content = file_path.read_bytes()
