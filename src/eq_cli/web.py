@@ -10,7 +10,6 @@ from __future__ import annotations
 import http.server
 import json
 import math
-import mimetypes
 import re
 import threading
 import urllib.parse
@@ -234,17 +233,12 @@ def _make_handler_class(
             request_path = urllib.parse.urlparse(self.path).path
             if request_path in {"/", "/index.html"}:
                 self._serve_file("index.html", "text/html; charset=utf-8")
+            elif request_path == "/favicon.svg":
+                self._serve_file("favicon.svg", "image/svg+xml")
             elif request_path == "/config":
                 self._send_json(config_data)
             else:
-                filename = request_path.lstrip("/")
-                if filename and "/" not in filename and Path(filename).name == filename:
-                    content_type = (
-                        mimetypes.guess_type(filename)[0] or "application/octet-stream"
-                    )
-                    self._serve_file(filename, content_type)
-                else:
-                    self.send_error(404)
+                self.send_error(404)
 
         def _serve_file(self, filename: str, content_type: str) -> None:
             """Read and send a static file from the package static directory."""
