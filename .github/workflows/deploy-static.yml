@@ -199,20 +199,71 @@ jobs:
           mkdir -p "${STATIC_BUILD_DIR}"
           cp -R src/eq_cli/static/. "${STATIC_BUILD_DIR}/"
           python - <<'PY'
-          from pathlib import Path
+          import json
           import os
+          import sys
+          import urllib.request
+          from pathlib import Path
+
+          sys.path.insert(0, str(Path("src").resolve()))
+          from eq_cli.release_versions import select_retained_versions
 
           build_dir = Path(os.environ["STATIC_BUILD_DIR"])
           version = os.environ["VERSION"]
+          repository = os.environ["GITHUB_REPOSITORY"]
+          github_token = os.environ["GITHUB_TOKEN"]
+          template = Path("src/eq_cli/static/index.html").read_text()
           index_path = build_dir / "index.html"
-          index_path.write_text(
-              index_path.read_text().replace("__EQ_CLI_VERSION__", version)
+          index_path.write_text(template.replace("__EQ_CLI_VERSION__", version))
+
+          request = urllib.request.Request(
+              f"https://api.github.com/repos/{repository}/releases?per_page=100",
+              headers={
+                  "Accept": "application/vnd.github+json",
+                  "Authorization": f"Bearer {github_token}",
+              },
+          )
+          with urllib.request.urlopen(request) as response:  # noqa: S310
+              releases = json.loads(response.read().decode())
+
+          release_tags = [
+              release.get("tag_name", "")
+              for release in releases
+              if not release.get("draft", False) and not release.get("prerelease", False)
+          ]
+          retained_versions = select_retained_versions(version, release_tags)
+          versions_dir = build_dir / "versions"
+          versions_dir.mkdir(exist_ok=True)
+
+          for retained in retained_versions:
+              retained_dir = versions_dir / f"v{retained}"
+              retained_dir.mkdir(parents=True, exist_ok=True)
+              (retained_dir / "index.html").write_text(
+                  template.replace("__EQ_CLI_VERSION__", retained)
+              )
+
+          (versions_dir / "index.json").write_text(
+              json.dumps(
+                  {
+                      "current": version,
+                      "retained": [
+                          {"version": retained, "path": f"/versions/v{retained}/"}
+                          for retained in retained_versions
+                      ],
+                  },
+                  indent=2,
+              )
+              + "\n"
           )
           PY
           aws s3 sync "${STATIC_BUILD_DIR}/" "s3://$DEPLOY_BUCKET_NAME/" \
             --delete \
             --exclude "index.html" \
+            --exclude "versions/*" \
             --cache-control "public,max-age=3600,s-maxage=86400"
+          aws s3 sync "${STATIC_BUILD_DIR}/versions/" "s3://$DEPLOY_BUCKET_NAME/versions/" \
+            --delete \
+            --cache-control "no-cache,must-revalidate"
           aws s3 cp "${STATIC_BUILD_DIR}/index.html" "s3://$DEPLOY_BUCKET_NAME/index.html" \
             --cache-control "no-cache,must-revalidate"
 
