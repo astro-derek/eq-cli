@@ -202,6 +202,7 @@ jobs:
           import json
           import os
           import sys
+          import urllib.error
           import urllib.request
           from pathlib import Path
 
@@ -216,20 +217,51 @@ jobs:
           index_path = build_dir / "index.html"
           index_path.write_text(template.replace("__EQ_CLI_VERSION__", version))
 
-          request = urllib.request.Request(
-              f"https://api.github.com/repos/{repository}/releases?per_page=100",
-              headers={
-                  "Accept": "application/vnd.github+json",
-                  "Authorization": f"Bearer {github_token}",
-              },
-          )
-          with urllib.request.urlopen(request) as response:  # noqa: S310
-              releases = json.loads(response.read().decode())
+          releases = []
+          page = 1
+          # 20 pages * 100 releases/page supports up to 2000 releases.
+          max_pages = 20
+          while page <= max_pages:
+              request = urllib.request.Request(
+                  f"https://api.github.com/repos/{repository}/releases?per_page=100&page={page}",
+                  headers={
+                      "Accept": "application/vnd.github+json",
+                      "Authorization": f"Bearer {github_token}",
+                  },
+              )
+              try:
+                  with urllib.request.urlopen(request, timeout=30) as response:
+                      payload = response.read().decode()
+              except urllib.error.URLError as error:
+                  raise SystemExit(
+                      f"Failed to fetch GitHub releases page {page}: {error}"
+                  ) from error
+              try:
+                  page_releases = json.loads(payload)
+              except json.JSONDecodeError as error:
+                  raise SystemExit(
+                      f"Failed to parse GitHub releases page {page}: {error}"
+                  ) from error
+              if not isinstance(page_releases, list):
+                  raise SystemExit(
+                      "Unexpected GitHub releases payload for page "
+                      f"{page}: expected list, got {type(page_releases).__name__}"
+                  )
+              if not page_releases:
+                  break
+              releases.extend(page_releases)
+              page += 1
+          else:
+              raise SystemExit(
+                  f"Exceeded maximum GitHub release pages ({max_pages})."
+              )
 
           release_tags = [
-              release.get("tag_name", "")
+              release["tag_name"]
               for release in releases
-              if not release.get("draft", False) and not release.get("prerelease", False)
+              if release.get("tag_name")
+              and not release.get("draft", False)
+              and not release.get("prerelease", False)
           ]
           retained_versions = select_retained_versions(version, release_tags)
           versions_dir = build_dir / "versions"
