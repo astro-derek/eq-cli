@@ -10,8 +10,10 @@ from __future__ import annotations
 import http.server
 import json
 import math
+import mimetypes
 import re
 import threading
+import urllib.parse
 from pathlib import Path
 from typing import Any
 
@@ -229,11 +231,19 @@ def _make_handler_class(
 
         def do_GET(self) -> None:
             """Dispatch GET requests to the page or config endpoints."""
-            if self.path in {"/", "/index.html"}:
+            request_path = urllib.parse.urlparse(self.path).path
+            if request_path in {"/", "/index.html"}:
                 self._serve_file("index.html", "text/html; charset=utf-8")
-            elif self.path == "/config":
+            elif request_path == "/config":
                 self._send_json(config_data)
             else:
+                filename = request_path.lstrip("/")
+                if filename and "/" not in filename and Path(filename).name == filename:
+                    content_type = (
+                        mimetypes.guess_type(filename)[0] or "application/octet-stream"
+                    )
+                    self._serve_file(filename, content_type)
+                    return
                 self.send_error(404)
 
         def _serve_file(self, filename: str, content_type: str) -> None:

@@ -216,6 +216,7 @@ def test_web_server_serves_index_html() -> None:
             html = resp.read().decode()
         assert "<canvas" in html
         assert "<title>frequency-analyzer</title>" in html
+        assert '<link rel="icon" type="image/svg+xml" href="/favicon.svg">' in html
         assert 'id="version-badge"' in html
         assert 'id="repo-link"' in html
         assert 'id="tb-meta"' in html
@@ -487,6 +488,20 @@ def test_web_server_serves_index_html_via_explicit_path() -> None:
         with urllib.request.urlopen(f"{server.url}index.html") as resp:
             html = resp.read().decode()
         assert "<canvas" in html
+    finally:
+        server.stop()
+
+
+def test_web_server_serves_favicon_svg() -> None:
+    """The favicon asset should be served from the static directory."""
+    server = WebServer("127.0.0.1", 0, build_web_config(RenderConfig()))
+    server.start()
+    try:
+        with urllib.request.urlopen(f"{server.url}favicon.svg") as resp:
+            content = resp.read().decode()
+            content_type = resp.headers.get("Content-Type", "")
+        assert "<svg" in content
+        assert "image/svg+xml" in content_type
     finally:
         server.stop()
 
