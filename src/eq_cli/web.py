@@ -243,13 +243,14 @@ def _make_handler_class(
                         mimetypes.guess_type(filename)[0] or "application/octet-stream"
                     )
                     self._serve_file(filename, content_type)
-                    return
-                self.send_error(404)
+                else:
+                    self.send_error(404)
 
         def _serve_file(self, filename: str, content_type: str) -> None:
             """Read and send a static file from the package static directory."""
-            file_path = _STATIC_DIR / filename
-            if not file_path.exists():
+            static_dir = _STATIC_DIR.resolve()
+            file_path = (static_dir / filename).resolve()
+            if not file_path.is_relative_to(static_dir) or not file_path.is_file():
                 self.send_error(404)
                 return
             content = file_path.read_bytes()
