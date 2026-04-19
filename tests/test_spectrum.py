@@ -258,3 +258,85 @@ def test_compute_fft_magnitude_no_longer_exported() -> None:
     assert not hasattr(spectrum_module, "compute_fft_magnitude"), (
         "compute_fft_magnitude was dead code and should have been removed"
     )
+
+
+def test_50hz_tone_peak_is_near_50hz_and_suppresses_leakage_above_100hz() -> None:
+    """A pure 50 Hz tone must peak near 50 Hz with no visible leakage above 100 Hz.
+
+    Regression test for the issue where a 50 Hz signal produced visible
+    peaks at ~100 Hz and beyond because narrow low-frequency log bands were
+    smaller than one FFT bin (so the actual 50 Hz band was empty) and
+    Hann-window sidelobes leaked energy across the log-frequency axis.
+
+    The fix combines band-center magnitude interpolation with a
+    Blackman-Harris window to both guarantee every band has a sample and
+    drive spectral sidelobes well below the visible dB floor.
+    """
+    sample_rate = 48_000
+    frame_size = 4_096
+    samples = _build_sine_samples(sample_rate, frame_size, 50.0, amplitude=1.0)
+
+    processor = SpectrumProcessor(
+        sample_rate=sample_rate,
+        band_count=64,
+        volume_mode="absolute",
+    )
+    result = processor.process_frame(
+        AudioFrame(samples=samples, sample_rate=sample_rate)
+    )
+
+    peak_idx = max(
+        range(len(result.levels_db)),
+        key=lambda i: result.levels_db[i],
+    )
+    peak_db = result.levels_db[peak_idx]
+    peak_freq = result.frequencies_hz[peak_idx]
+
+    # The peak band must cover an area near 50 Hz (the two adjacent log
+    # bands around 50 Hz span ~40-60 Hz in the default 64-band layout).
+    assert 40.0 <= peak_freq <= 60.0, (
+        f"Peak should be near 50 Hz but was at {peak_freq:.2f} Hz"
+    )
+
+    # All bands whose center is above 100 Hz must be at least 50 dB below
+    # the peak — well below the default visible db_min of -80 dB relative
+    # to the peak, i.e. no visible "peak beyond 100 Hz" artifact.
+    for freq, level in zip(result.frequencies_hz, result.levels_db, strict=True):
+        if freq > 100.0:
+            assert level < peak_db - 50.0, (
+                f"Band at {freq:.1f} Hz shows leakage too close to peak: "
+                f"{level:.2f} dB vs peak {peak_db:.2f} dB"
+            )
+
+
+def test_50hz_tone_band_near_50hz_is_not_empty() -> None:
+    """The band whose center is closest to 50 Hz must receive a magnitude.
+
+    Before the interpolation fix this band was empty (dB floor) because no
+    FFT bin fell inside its narrow log-frequency range.
+    """
+    sample_rate = 48_000
+    frame_size = 4_096
+    samples = _build_sine_samples(sample_rate, frame_size, 50.0, amplitude=1.0)
+
+    processor = SpectrumProcessor(
+        sample_rate=sample_rate,
+        band_count=64,
+        volume_mode="absolute",
+    )
+    result = processor.process_frame(
+        AudioFrame(samples=samples, sample_rate=sample_rate)
+    )
+
+    closest_idx = min(
+        range(len(result.frequencies_hz)),
+        key=lambda i: abs(result.frequencies_hz[i] - 50.0),
+    )
+    peak_db = max(result.levels_db)
+
+    # The band nearest 50 Hz must be within 3 dB of the peak (previously
+    # this band reported the dB floor because no FFT bin fell inside it).
+    assert result.levels_db[closest_idx] >= peak_db - 3.0, (
+        f"Band nearest 50 Hz (center={result.frequencies_hz[closest_idx]:.2f} Hz) "
+        f"reported {result.levels_db[closest_idx]:.2f} dB vs peak {peak_db:.2f} dB"
+    )

@@ -40,6 +40,33 @@ class _FrameSizeCache:
     frequencies_hz: npt.NDArray[np.float64]
     band_starts: npt.NDArray[np.int64]
     band_ends: npt.NDArray[np.int64]
+    # Linear-interpolation indices and weights for sampling FFT magnitudes at
+    # each band-center frequency.  These are used so narrow log bands (below
+    # ~100 Hz where the log-band width is smaller than one FFT bin) still
+    # receive a magnitude sample instead of dropping to the dB floor.
+    center_lo_bin: npt.NDArray[np.int64]
+    center_hi_bin: npt.NDArray[np.int64]
+    center_hi_weight: npt.NDArray[np.float64]
+
+
+def _blackman_harris_window(frame_size: int) -> npt.NDArray[np.float64]:
+    """Return a 4-term Blackman-Harris window.
+
+    Blackman-Harris has much lower spectral sidelobes (~-92 dB) than the
+    Hann window (~-31 dB), which greatly reduces the visible "leakage"
+    peaks that spread across higher log-frequency bands when a narrow
+    tone (like a 50 Hz sine) is analyzed.
+    """
+    if frame_size <= 1:
+        return np.ones(max(frame_size, 1), dtype=np.float64)
+    indices = np.arange(frame_size, dtype=np.float64)
+    denom = float(frame_size - 1)
+    return (
+        0.35875
+        - 0.48829 * np.cos(2.0 * np.pi * indices / denom)
+        + 0.14128 * np.cos(4.0 * np.pi * indices / denom)
+        - 0.01168 * np.cos(6.0 * np.pi * indices / denom)
+    )
 
 
 def build_log_frequency_centers(
@@ -129,13 +156,32 @@ class SpectrumProcessor:
         windowed = frame.samples * frame_cache.window
         spectrum = np.fft.rfft(windowed)
         magnitudes = np.abs(spectrum)
-        band_magnitudes = np.zeros(self.band_count, dtype=np.float64)
 
+        # Sample the FFT magnitude at each band's center frequency using
+        # linear interpolation between neighboring bins.  For narrow
+        # low-frequency log bands whose width is smaller than one FFT bin,
+        # this yields a meaningful magnitude where a searchsorted-style
+        # bin-range scan would otherwise return nothing and cause the
+        # visible peak to jump to a neighboring band.
+        lo_bins = frame_cache.center_lo_bin
+        hi_bins = frame_cache.center_hi_bin
+        hi_weights = frame_cache.center_hi_weight
+        interpolated = (
+            magnitudes[lo_bins] * (1.0 - hi_weights)
+            + magnitudes[hi_bins] * hi_weights
+        )
+        band_magnitudes = interpolated.astype(np.float64, copy=True)
+
+        # In addition, take the max across any bins that fall strictly
+        # inside the band range.  This preserves behavior at high
+        # frequencies where many bins land in the same log band.
         for index in range(self.band_count):
             start = int(frame_cache.band_starts[index])
             end = int(frame_cache.band_ends[index])
             if start < end:
-                band_magnitudes[index] = float(np.max(magnitudes[start:end]))
+                bin_max = float(np.max(magnitudes[start:end]))
+                if bin_max > band_magnitudes[index]:
+                    band_magnitudes[index] = bin_max
 
         levels_db = self._levels_to_db(band_magnitudes, frame.samples.size)
 
@@ -170,11 +216,31 @@ class SpectrumProcessor:
             side="right",
         )
 
+        # Pre-compute linear-interpolation indices/weights for sampling FFT
+        # magnitudes at each band-center frequency.  Clamp to the valid bin
+        # range so narrow bands near the edges remain well-defined.
+        bin_hz = float(self.sample_rate) / float(frame_size)
+        max_bin = frequencies_hz.size - 1
+        if bin_hz > 0 and max_bin >= 0:
+            center_float_bin = np.clip(
+                self._band_centers / bin_hz,
+                0.0,
+                float(max_bin),
+            )
+        else:
+            center_float_bin = np.zeros(self.band_count, dtype=np.float64)
+        center_lo_bin = np.floor(center_float_bin).astype(np.int64)
+        center_hi_bin = np.minimum(center_lo_bin + 1, max_bin).astype(np.int64)
+        center_hi_weight = (center_float_bin - center_lo_bin).astype(np.float64)
+
         cache = _FrameSizeCache(
-            window=np.hanning(frame_size),
+            window=_blackman_harris_window(frame_size),
             frequencies_hz=frequencies_hz,
             band_starts=band_starts,
             band_ends=band_ends,
+            center_lo_bin=center_lo_bin,
+            center_hi_bin=center_hi_bin,
+            center_hi_weight=center_hi_weight,
         )
         if len(self._frame_size_cache) >= _FRAME_CACHE_MAX_SIZE:
             self._frame_size_cache.popitem(last=False)

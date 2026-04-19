@@ -638,16 +638,41 @@ function rebuildBandGeometry() {
 var _fftBuf = new Float32Array(2048); // reused each frame
 
 function computeBandLevels(fftData, sampleRate, fftSize) {
-  // Map FFT bins to bands using searchsorted-like behavior (ceil for both
-  // start and end) to match Python SpectrumProcessor exactly. This prevents
-  // overlapping bin reads in adjacent bands at low frequencies.
+  // Compute each band's dB level in two parts:
+  //   1. Linearly interpolate the FFT magnitude at the band's CENTER
+  //      frequency (in dB, since getFloatFrequencyData already returns dB).
+  //      This guarantees every band has a sample even when the log-band
+  //      width is narrower than one FFT bin (common below ~100 Hz).
+  //   2. Take the max across any bins that fall strictly inside the band
+  //      range.  This preserves the existing behavior at high frequencies
+  //      where many FFT bins fall into a single log band.
+  //
+  // Without step 1, narrow low-frequency bands that contain no FFT bin
+  // receive no data and the visible peak for a tone like 50 Hz jumps to a
+  // neighboring band while windowing sidelobes appear as separate peaks
+  // far to the right on the logarithmic axis.
   var binHz = sampleRate / fftSize;
   var count = CFG.band_count;
   var out = new Float32Array(count);
+  var maxBin = fftData.length - 1;
   for (var b = 0; b < count; b++) {
+    // Step 1: interpolate at band center frequency.
+    var centerBin = BAND_CENTERS[b] / binHz;
+    if (centerBin < 0) { centerBin = 0; }
+    if (centerBin > maxBin) { centerBin = maxBin; }
+    var k0 = Math.floor(centerBin);
+    var k1 = k0 + 1;
+    if (k1 > maxBin) { k1 = maxBin; }
+    var frac = centerBin - k0;
+    var v0 = fftData[k0];
+    var v1 = fftData[k1];
+    if (!isFinite(v0)) { v0 = CFG.db_min; }
+    if (!isFinite(v1)) { v1 = CFG.db_min; }
+    var mx = v0 * (1 - frac) + v1 * frac;
+
+    // Step 2: also scan any bins whose frequency falls inside the band.
     var lo = Math.max(0, Math.ceil(BAND_EDGES[b] / binHz));
     var hi = Math.min(fftData.length, Math.ceil(BAND_EDGES[b + 1] / binHz));
-    var mx = -Infinity;
     for (var k = lo; k < hi; k++) {
       var v = fftData[k];
       if (isFinite(v) && v > mx) { mx = v; }
