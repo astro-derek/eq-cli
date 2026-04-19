@@ -259,6 +259,12 @@ def test_web_server_serves_index_html() -> None:
         assert "if (isFrozen) { titleStr += ' \\u25ae FROZEN'; }" in html
         assert "function drawPeakDbLabels(peaks)" in html
         assert "drawPeakDbLabels(peaks);" in html
+        # Hover tooltip is a browser-only setting exposed via the Settings
+        # panel; verify the checkbox, default CFG value, and draw path exist.
+        assert 'id="cfg-show_hover_tooltip"' in html
+        assert "show_hover_tooltip: false" in html
+        assert "function drawHoverTooltip()" in html
+        assert "drawHoverTooltip();" in html
         meta_match = re.search(
             r'<div class="tb-group" id="tb-meta">(?P<section>.*?)</div>',
             html,
