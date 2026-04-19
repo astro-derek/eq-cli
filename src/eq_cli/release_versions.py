@@ -56,3 +56,25 @@ def select_retained_versions(
         f"{major}.{minor}.{patch}"
         for major, minor, patch in sorted(kept, reverse=True)
     ]
+
+
+def extract_versions_from_manifest(manifest: object) -> list[str]:
+    """Extract version strings from a versions/index.json payload."""
+    if not isinstance(manifest, dict):
+        return []
+
+    versions: list[str] = []
+    current = manifest.get("current")
+    if isinstance(current, str):
+        versions.append(current)
+
+    retained = manifest.get("retained")
+    if isinstance(retained, list):
+        for entry in retained:
+            if not isinstance(entry, dict):
+                continue
+            version = entry.get("version")
+            if isinstance(version, str):
+                versions.append(version)
+
+    return versions

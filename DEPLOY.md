@@ -221,6 +221,7 @@ The automated workflow also publishes versioned pages under `/versions/` and
 retains:
 
 - every release in the current major line
+- already-published `/versions/` entries in the current major line
 - only the latest release for each previous major line
 
 Example URLs:
