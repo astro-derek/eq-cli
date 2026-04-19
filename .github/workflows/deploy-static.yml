@@ -18,6 +18,10 @@ permissions:
   contents: read
   id-token: write   # Required for OIDC authentication with AWS
 
+concurrency:
+  group: deploy-static-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -203,18 +207,23 @@ jobs:
           python - <<'PY'
           import json
           import os
+          import re
           import sys
           import urllib.error
           import urllib.request
           from pathlib import Path
 
           sys.path.insert(0, str(Path("src").resolve()))
-          from eq_cli.release_versions import select_retained_versions
+          from eq_cli.release_versions import (
+              extract_versions_from_manifest,
+              select_retained_versions,
+          )
 
           build_dir = Path(os.environ["STATIC_BUILD_DIR"])
           version = os.environ["VERSION"]
           repository = os.environ["GITHUB_REPOSITORY"]
           github_token = os.environ["GITHUB_TOKEN"]
+          cloudfront_domain = os.environ.get("DEPLOY_CLOUDFRONT_DOMAIN", "").strip()
           template = Path("src/eq_cli/static/index.html").read_text()
           index_path = build_dir / "index.html"
           index_path.write_text(template.replace("__EQ_CLI_VERSION__", version))
@@ -265,7 +274,51 @@ jobs:
               and not release.get("draft", False)
               and not release.get("prerelease", False)
           ]
-          retained_versions = select_retained_versions(version, release_tags)
+          existing_versions: list[str] = []
+          if cloudfront_domain:
+              if re.fullmatch(
+                  r"[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?"
+                  r"(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*",
+                  cloudfront_domain,
+              ) is None:
+                  print(
+                      "Warning: invalid DEPLOY_CLOUDFRONT_DOMAIN value "
+                      f"{cloudfront_domain!r}; skipping existing versions fetch.",
+                      file=sys.stderr,
+                  )
+                  cloudfront_domain = ""
+
+          if cloudfront_domain:
+              existing_versions_url = (
+                  f"https://{cloudfront_domain}/versions/index.json"
+              )
+              try:
+                  with urllib.request.urlopen(existing_versions_url, timeout=30) as response:
+                      existing_manifest_payload = response.read().decode()
+              except urllib.error.URLError as error:
+                  print(
+                      "Warning: failed to fetch existing versions manifest "
+                      f"from {existing_versions_url}: {error}",
+                      file=sys.stderr,
+                  )
+              else:
+                  try:
+                      existing_manifest = json.loads(existing_manifest_payload)
+                  except json.JSONDecodeError as error:
+                      print(
+                          "Warning: failed to parse existing versions manifest "
+                          f"from {existing_versions_url}: {error}",
+                          file=sys.stderr,
+                      )
+                  else:
+                      existing_versions = extract_versions_from_manifest(
+                          existing_manifest
+                      )
+
+          retained_versions = select_retained_versions(
+              version,
+              release_tags + existing_versions,
+          )
           versions_dir = build_dir / "versions"
           versions_dir.mkdir(exist_ok=True)
 

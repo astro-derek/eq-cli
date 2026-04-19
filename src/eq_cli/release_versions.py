@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 
 _SEMVER_PATTERN = re.compile(r"^v?(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)$")
 
@@ -56,3 +56,34 @@ def select_retained_versions(
         f"{major}.{minor}.{patch}"
         for major, minor, patch in sorted(kept, reverse=True)
     ]
+
+
+def extract_versions_from_manifest(manifest: Mapping[str, object] | None) -> list[str]:
+    """Extract version strings from a versions/index.json-style payload.
+
+    Expected manifest shape:
+        {
+            "current": "1.0.4",
+            "retained": [{"version": "1.0.3", "path": "/versions/v1.0.3/"}],
+        }
+
+    Invalid/missing fields and entries are ignored.
+    """
+    if manifest is None:
+        return []
+
+    versions: list[str] = []
+    current = manifest.get("current")
+    if isinstance(current, str):
+        versions.append(current)
+
+    retained = manifest.get("retained")
+    if isinstance(retained, list):
+        for entry in retained:
+            if not isinstance(entry, dict):
+                continue
+            version = entry.get("version")
+            if isinstance(version, str):
+                versions.append(version)
+
+    return versions
