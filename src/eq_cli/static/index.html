@@ -863,7 +863,8 @@ function buildFreqMarkers() {
     if (freq < minF * 0.9 || freq > maxF * 1.1) { return; }
     var pos = frequencyToBandPosition(freq);
     if (pos === null) { return; }
-    // +0.5 maps a band index to its center rather than its left edge.
+    // Map band-units to pixels: +0.5 centers within the selected band, then
+    // multiply by (L.barW / count) via this normalized width scaling.
     var x = L.barX + Math.round(((pos + 0.5) / count) * L.barW);
     var isLast = (idx === marks.length - 1);
     var label;

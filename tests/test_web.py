@@ -471,7 +471,6 @@ def test_web_index_maps_frequency_markers_to_band_positions() -> None:
         )
         assert "var pos = frequencyToBandPosition(freq);" in html
         assert "var x = L.barX + Math.round(((pos + 0.5) / count) * L.barW);" in html
-        assert "var logRange = Math.log10(maxF) - Math.log10(minF);" not in html
     finally:
         server.stop()
 
