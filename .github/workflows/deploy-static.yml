@@ -276,7 +276,11 @@ jobs:
           ]
           existing_versions: list[str] = []
           if cloudfront_domain:
-              if re.fullmatch(r"[A-Za-z0-9.-]+", cloudfront_domain) is None:
+              if re.fullmatch(
+                  r"[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?"
+                  r"(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*",
+                  cloudfront_domain,
+              ) is None:
                   print(
                       "Warning: invalid DEPLOY_CLOUDFRONT_DOMAIN value "
                       f"{cloudfront_domain!r}; skipping existing versions fetch.",
