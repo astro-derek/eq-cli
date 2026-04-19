@@ -435,6 +435,43 @@ eq-cli --ui web --db-min -60 --db-max 0 --history-rows 4
 > not yet implemented; it falls back to `sum` in the browser.  All other channel
 > modes are fully supported via `ChannelSplitterNode`.
 
+## Troubleshooting
+
+### Tone peaks appear at the wrong frequencies (e.g. 150 Hz / 250 Hz instead of 50 Hz)
+
+This is expected physical behaviour when routing audio through **speakers and a
+microphone**, and is not a bug in the analyzer.  Two effects combine to shift the
+apparent peak away from the fundamental:
+
+1. **Speaker harmonic distortion.**  Small speakers (laptop, monitor, phone) roll
+   off 20–30 dB below roughly 80 Hz.  To move enough air they work harder at
+   those frequencies, producing heavy *odd-harmonic* distortion.  For a 50 Hz
+   source tone the 3rd harmonic (150 Hz) and 5th harmonic (250 Hz) easily exceed
+   the attenuated fundamental at the diaphragm.
+
+2. **Microphone hardware high-pass filter.**  Most built-in laptop and headset
+   microphones include a hardware HPF around 80–120 Hz that attenuates the
+   fundamental by an additional 10–20 dB before the signal ever reaches the
+   browser — even though all browser-side processing (`echoCancellation`,
+   `noiseSuppression`, `autoGainControl`) is disabled by default.
+
+The net result for a "50 Hz tone played on speakers → re-captured by a mic" is
+typically: fundamental at around −50 dB, 3rd harmonic at around −5 dB, 5th
+harmonic at around −15 dB.  That is exactly what is shown in the analyzer.
+
+**To verify the analyzer is accurate, bypass the acoustic path entirely:**
+
+- **Linux:** use a PulseAudio/PipeWire *monitor* source (the loopback device
+  that captures the software mix rather than the microphone).
+- **macOS:** install [BlackHole](https://github.com/ExistingMusicBed/BlackHole)
+  or [Loopback](https://rogueamoeba.com/loopback/) and select the virtual device.
+- **Windows:** enable *Stereo Mix* in Sound settings or use
+  [VB-CABLE](https://vb-audio.com/Cable/).
+
+With a digital loopback selected, a pure 50 Hz tone should produce a single
+clean peak at the 50 Hz band with no energy at 150 Hz or 250 Hz, confirming
+that the frequency mapping and rendering pipeline are correct.
+
 ## Platform notes
 
 | Platform | Tested | Notes |
