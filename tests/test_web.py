@@ -450,6 +450,31 @@ def test_web_index_frequency_axis_alignment_and_label_anchor() -> None:
         server.stop()
 
 
+def test_web_index_maps_frequency_markers_to_band_positions() -> None:
+    """Frequency markers should be placed from rendered band centers."""
+    server = WebServer("127.0.0.1", 0, build_web_config(RenderConfig()))
+    server.start()
+    try:
+        with urllib.request.urlopen(f"{server.url}") as resp:
+            html = resp.read().decode()
+        assert "function frequencyToBandPosition(freq) {" in html
+        assert "if (freq <= BAND_CENTERS[0]) { return 0; }" in html
+        assert "if (freq >= BAND_CENTERS[count - 1]) { return count - 1; }" in html
+        assert "var lo = BAND_CENTERS[i];" in html
+        assert "var hi = BAND_CENTERS[i + 1];" in html
+        assert "var denom = Math.log(hi) - Math.log(lo);" in html
+        assert "var t = (Math.log(freq) - Math.log(lo)) / denom;" in html
+        assert "return i + Math.max(0, Math.min(1, t));" in html
+        assert (
+            "var minF = BAND_EDGES[0], maxF = BAND_EDGES[BAND_EDGES.length - 1];"
+            in html
+        )
+        assert "var pos = frequencyToBandPosition(freq);" in html
+        assert "var x = L.barX + Math.round(((pos + 0.5) / count) * L.barW);" in html
+    finally:
+        server.stop()
+
+
 def test_web_index_includes_graph_style_setting() -> None:
     """Settings and renderer should support both filled bars and line graph modes."""
     server = WebServer("127.0.0.1", 0, build_web_config(RenderConfig()))
@@ -476,6 +501,32 @@ def test_web_band_span_uses_consistent_width_step() -> None:
         assert "var step = W / count;" in html
         assert "bandSpans.push({ x: L.barX + i * step, w: Math.max(1, step) });" in html
         assert "var x0 = Math.round(i * W / count);" not in html
+    finally:
+        server.stop()
+
+
+def test_web_fft_bin_mapping_uses_center_interpolation() -> None:
+    """FFT bin-to-band mapping should interpolate at each band center.
+
+    The interpolation guarantees every band (including narrow low-frequency
+    log bands where width < one FFT bin) receives a magnitude sample, which
+    fixes 50 Hz tones showing leakage peaks beyond 100 Hz on the log axis.
+    """
+    server = WebServer("127.0.0.1", 0, build_web_config(RenderConfig()))
+    server.start()
+    try:
+        with urllib.request.urlopen(f"{server.url}") as resp:
+            html = resp.read().decode()
+        # Center-frequency interpolation must happen in computeBandLevels
+        assert "var centerBin = BAND_CENTERS[b] / binHz;" in html
+        assert "var frac = centerBin - k0;" in html
+        assert "var mx = v0 * (1 - frac) + v1 * frac;" in html
+        # And we still scan any bins strictly inside the band
+        assert "var lo = Math.max(0, Math.ceil(BAND_EDGES[b] / binHz));" in html
+        assert (
+            "var hi = Math.min(fftData.length, Math.ceil(BAND_EDGES[b + 1] / binHz));"
+            in html
+        )
     finally:
         server.stop()
 

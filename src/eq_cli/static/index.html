@@ -638,14 +638,42 @@ function rebuildBandGeometry() {
 var _fftBuf = new Float32Array(2048); // reused each frame
 
 function computeBandLevels(fftData, sampleRate, fftSize) {
+  // Compute each band's dB level in two parts:
+  //   1. Linearly interpolate the FFT magnitude at the band's CENTER
+  //      frequency (in dB, since getFloatFrequencyData already returns dB).
+  //      This guarantees every band has a sample even when the log-band
+  //      width is narrower than one FFT bin (common below ~100 Hz).
+  //   2. Take the max across any bins that fall strictly inside the band
+  //      range.  This preserves the existing behavior at high frequencies
+  //      where many FFT bins fall into a single log band.
+  //
+  // Without step 1, narrow low-frequency bands that contain no FFT bin
+  // receive no data and the visible peak for a tone like 50 Hz jumps to a
+  // neighboring band while windowing sidelobes appear as separate peaks
+  // far to the right on the logarithmic axis.
   var binHz = sampleRate / fftSize;
   var count = CFG.band_count;
   var out = new Float32Array(count);
+  var maxBin = fftData.length - 1;
   for (var b = 0; b < count; b++) {
-    var lo = Math.max(0, Math.floor(BAND_EDGES[b] / binHz));
-    var hi = Math.min(fftData.length - 1, Math.ceil(BAND_EDGES[b + 1] / binHz));
-    var mx = -Infinity;
-    for (var k = lo; k <= hi; k++) {
+    // Step 1: interpolate at band center frequency.
+    var centerBin = BAND_CENTERS[b] / binHz;
+    if (centerBin < 0) { centerBin = 0; }
+    if (centerBin > maxBin) { centerBin = maxBin; }
+    var k0 = Math.floor(centerBin);
+    var k1 = k0 + 1;
+    if (k1 > maxBin) { k1 = maxBin; }
+    var frac = centerBin - k0;
+    var v0 = fftData[k0];
+    var v1 = fftData[k1];
+    if (!isFinite(v0)) { v0 = CFG.db_min; }
+    if (!isFinite(v1)) { v1 = CFG.db_min; }
+    var mx = v0 * (1 - frac) + v1 * frac;
+
+    // Step 2: also scan any bins whose frequency falls inside the band.
+    var lo = Math.max(0, Math.ceil(BAND_EDGES[b] / binHz));
+    var hi = Math.min(fftData.length, Math.ceil(BAND_EDGES[b + 1] / binHz));
+    for (var k = lo; k < hi; k++) {
       var v = fftData[k];
       if (isFinite(v) && v > mx) { mx = v; }
     }
@@ -832,18 +860,40 @@ function buildBandSpans() {
   }
 }
 
+function frequencyToBandPosition(freq) {
+  var count = BAND_CENTERS.length;
+  if (count <= 0) { return null; }
+  if (freq <= BAND_CENTERS[0]) { return 0; }
+  if (freq >= BAND_CENTERS[count - 1]) { return count - 1; }
+
+  for (var i = 0; i < count - 1; i++) {
+    var lo = BAND_CENTERS[i];
+    var hi = BAND_CENTERS[i + 1];
+    if (freq < lo || freq > hi) { continue; }
+    var denom = Math.log(hi) - Math.log(lo);
+    if (denom <= 0) { return i; }
+    var t = (Math.log(freq) - Math.log(lo)) / denom;
+    return i + Math.max(0, Math.min(1, t));
+  }
+  return count - 1;
+}
+
 function buildFreqMarkers() {
   freqMarkers = [];
   if (!CFG.show_axis_labels) { return; }
   var defaults = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
   var marks = (CFG.axis_frequencies && CFG.axis_frequencies.length)
     ? CFG.axis_frequencies : defaults;
-  var minF = BAND_CENTERS[0], maxF = BAND_CENTERS[BAND_CENTERS.length - 1];
-  var logRange = Math.log10(maxF) - Math.log10(minF);
+  if (BAND_CENTERS.length <= 0) { return; }
+  var minF = BAND_EDGES[0], maxF = BAND_EDGES[BAND_EDGES.length - 1];
+  var count = BAND_CENTERS.length;
   marks.forEach(function (freq, idx) {
     if (freq < minF * 0.9 || freq > maxF * 1.1) { return; }
-    var norm = (Math.log10(freq) - Math.log10(minF)) / logRange;
-    var x = L.barX + Math.round(norm * (L.barW - 1));
+    var pos = frequencyToBandPosition(freq);
+    if (pos === null) { return; }
+    // Map band-units to pixels: +0.5 centers within the selected band, then
+    // multiply by (L.barW / count) via this normalized width scaling.
+    var x = L.barX + Math.round(((pos + 0.5) / count) * L.barW);
     var isLast = (idx === marks.length - 1);
     var label;
     if (freq >= 1000) {
