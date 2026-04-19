@@ -281,12 +281,21 @@ jobs:
               try:
                   with urllib.request.urlopen(existing_versions_url, timeout=30) as response:
                       existing_manifest_payload = response.read().decode()
-              except urllib.error.URLError:
-                  pass
+              except urllib.error.URLError as error:
+                  print(
+                      "Warning: failed to fetch existing versions manifest "
+                      f"from {existing_versions_url}: {error}",
+                      file=sys.stderr,
+                  )
               else:
                   try:
                       existing_manifest = json.loads(existing_manifest_payload)
-                  except json.JSONDecodeError:
+                  except json.JSONDecodeError as error:
+                      print(
+                          "Warning: failed to parse existing versions manifest "
+                          f"from {existing_versions_url}: {error}",
+                          file=sys.stderr,
+                      )
                       existing_manifest = None
                   existing_versions = extract_versions_from_manifest(existing_manifest)
 

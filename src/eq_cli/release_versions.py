@@ -59,7 +59,16 @@ def select_retained_versions(
 
 
 def extract_versions_from_manifest(manifest: object) -> list[str]:
-    """Extract version strings from a versions/index.json payload."""
+    """Extract version strings from a versions/index.json-style payload.
+
+    Expected manifest shape:
+        {
+            "current": "1.0.4",
+            "retained": [{"version": "1.0.3", "path": "/versions/v1.0.3/"}],
+        }
+
+    Invalid/missing fields and entries are ignored.
+    """
     if not isinstance(manifest, dict):
         return []
 
