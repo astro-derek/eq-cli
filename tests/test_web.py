@@ -450,6 +450,25 @@ def test_web_index_frequency_axis_alignment_and_label_anchor() -> None:
         server.stop()
 
 
+def test_web_index_maps_frequency_markers_to_band_positions() -> None:
+    """Frequency markers should be placed from rendered band centers."""
+    server = WebServer("127.0.0.1", 0, build_web_config(RenderConfig()))
+    server.start()
+    try:
+        with urllib.request.urlopen(f"{server.url}") as resp:
+            html = resp.read().decode()
+        assert "function frequencyToBandPosition(freq) {" in html
+        assert (
+            "var minF = BAND_EDGES[0], maxF = BAND_EDGES[BAND_EDGES.length - 1];"
+            in html
+        )
+        assert "var pos = frequencyToBandPosition(freq);" in html
+        assert "var x = L.barX + Math.round(((pos + 0.5) / count) * L.barW);" in html
+        assert "var logRange = Math.log10(maxF) - Math.log10(minF);" not in html
+    finally:
+        server.stop()
+
+
 def test_web_index_includes_graph_style_setting() -> None:
     """Settings and renderer should support both filled bars and line graph modes."""
     server = WebServer("127.0.0.1", 0, build_web_config(RenderConfig()))
