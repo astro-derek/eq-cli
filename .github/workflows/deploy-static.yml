@@ -207,6 +207,7 @@ jobs:
           python - <<'PY'
           import json
           import os
+          import re
           import sys
           import urllib.error
           import urllib.request
@@ -275,6 +276,15 @@ jobs:
           ]
           existing_versions: list[str] = []
           if cloudfront_domain:
+              if re.fullmatch(r"[A-Za-z0-9.-]+", cloudfront_domain) is None:
+                  print(
+                      "Warning: invalid DEPLOY_CLOUDFRONT_DOMAIN value "
+                      f"{cloudfront_domain!r}; skipping existing versions fetch.",
+                      file=sys.stderr,
+                  )
+                  cloudfront_domain = ""
+
+          if cloudfront_domain:
               existing_versions_url = (
                   f"https://{cloudfront_domain}/versions/index.json"
               )
@@ -296,8 +306,10 @@ jobs:
                           f"from {existing_versions_url}: {error}",
                           file=sys.stderr,
                       )
-                      existing_manifest = None
-                  existing_versions = extract_versions_from_manifest(existing_manifest)
+                  else:
+                      existing_versions = extract_versions_from_manifest(
+                          existing_manifest
+                      )
 
           retained_versions = select_retained_versions(
               version,
