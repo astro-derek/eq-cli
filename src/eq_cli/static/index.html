@@ -639,7 +639,8 @@ var _fftBuf = new Float32Array(2048); // reused each frame
 
 function computeBandLevels(fftData, sampleRate, fftSize) {
   // Map FFT bins to bands using searchsorted-like behavior (ceil for both
-  // start and end) to match Python SpectrumProcessor exactly.
+  // start and end) to match Python SpectrumProcessor exactly. This prevents
+  // overlapping bin reads in adjacent bands at low frequencies.
   var binHz = sampleRate / fftSize;
   var count = CFG.band_count;
   var out = new Float32Array(count);
