@@ -638,14 +638,16 @@ function rebuildBandGeometry() {
 var _fftBuf = new Float32Array(2048); // reused each frame
 
 function computeBandLevels(fftData, sampleRate, fftSize) {
+  // Map FFT bins to bands using searchsorted-like behavior (ceil for both
+  // start and end) to match Python SpectrumProcessor exactly.
   var binHz = sampleRate / fftSize;
   var count = CFG.band_count;
   var out = new Float32Array(count);
   for (var b = 0; b < count; b++) {
-    var lo = Math.max(0, Math.floor(BAND_EDGES[b] / binHz));
-    var hi = Math.min(fftData.length - 1, Math.ceil(BAND_EDGES[b + 1] / binHz));
+    var lo = Math.max(0, Math.ceil(BAND_EDGES[b] / binHz));
+    var hi = Math.min(fftData.length, Math.ceil(BAND_EDGES[b + 1] / binHz));
     var mx = -Infinity;
-    for (var k = lo; k <= hi; k++) {
+    for (var k = lo; k < hi; k++) {
       var v = fftData[k];
       if (isFinite(v) && v > mx) { mx = v; }
     }

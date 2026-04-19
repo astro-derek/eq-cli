@@ -505,6 +505,27 @@ def test_web_band_span_uses_consistent_width_step() -> None:
         server.stop()
 
 
+def test_web_fft_bin_mapping_uses_searchsorted_style() -> None:
+    """FFT bin-to-band mapping should use ceil for both ends to match Python."""
+    server = WebServer("127.0.0.1", 0, build_web_config(RenderConfig()))
+    server.start()
+    try:
+        with urllib.request.urlopen(f"{server.url}") as resp:
+            html = resp.read().decode()
+        # The fix replaces floor/ceil+inclusive with ceil/ceil+exclusive iteration
+        assert "var lo = Math.max(0, Math.ceil(BAND_EDGES[b] / binHz));" in html
+        assert (
+            "var hi = Math.min(fftData.length, Math.ceil(BAND_EDGES[b + 1] / binHz));"
+            in html
+        )
+        assert "for (var k = lo; k < hi; k++) {" in html
+        # Old floor-based start and inclusive end should be gone
+        assert "Math.floor(BAND_EDGES[b] / binHz)" not in html
+        assert "for (var k = lo; k <= hi; k++)" not in html
+    finally:
+        server.stop()
+
+
 def test_web_server_serves_index_html_via_explicit_path() -> None:
     """Accessing /index.html explicitly should also serve the page."""
     server = WebServer("127.0.0.1", 0, build_web_config(RenderConfig()))
