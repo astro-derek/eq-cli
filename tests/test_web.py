@@ -458,6 +458,13 @@ def test_web_index_maps_frequency_markers_to_band_positions() -> None:
         with urllib.request.urlopen(f"{server.url}") as resp:
             html = resp.read().decode()
         assert "function frequencyToBandPosition(freq) {" in html
+        assert "if (freq <= BAND_CENTERS[0]) { return 0; }" in html
+        assert "if (freq >= BAND_CENTERS[count - 1]) { return count - 1; }" in html
+        assert "var lo = BAND_CENTERS[i];" in html
+        assert "var hi = BAND_CENTERS[i + 1];" in html
+        assert "var denom = Math.log(hi) - Math.log(lo);" in html
+        assert "var t = (Math.log(freq) - Math.log(lo)) / denom;" in html
+        assert "return i + Math.max(0, Math.min(1, t));" in html
         assert (
             "var minF = BAND_EDGES[0], maxF = BAND_EDGES[BAND_EDGES.length - 1];"
             in html
