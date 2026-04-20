@@ -228,6 +228,9 @@ def test_web_server_serves_index_html() -> None:
         assert 'id="cfg-fft_size"' in html
         assert 'id="cfg-graph_style"' in html
         assert 'id="cfg-history_fps"' in html
+        assert 'id="cfg-history_rows" step="1" min="0" inputmode="numeric"' in html
+        assert 'id="cfg-history_fps" step="1" min="1" inputmode="numeric"' in html
+        assert 'id="cfg-gain_db" step="0.5" inputmode="decimal"' in html
         assert 'id="cfg-title_text"' not in html
         assert "CFG.title_text" not in html
         assert "<u>F</u>reeze" in html

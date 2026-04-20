@@ -1436,10 +1436,10 @@ window.addEventListener('DOMContentLoaded', function () {
 
     <div class="settings-section">
       <div class="settings-section-title">dB Scale</div>
-      <div class="settings-row"><label for="cfg-db_min">Min dB</label><input type="number" id="cfg-db_min" step="1"></div>
-      <div class="settings-row"><label for="cfg-db_max">Max dB</label><input type="number" id="cfg-db_max" step="1"></div>
-      <div class="settings-row"><label for="cfg-db_interval">dB interval</label><input type="number" id="cfg-db_interval" step="1" min="1"></div>
-      <div class="settings-row"><label for="cfg-graph_height">Graph height (0&nbsp;=&nbsp;auto)</label><input type="number" id="cfg-graph_height" step="1" min="0"></div>
+      <div class="settings-row"><label for="cfg-db_min">Min dB</label><input type="number" id="cfg-db_min" step="1" inputmode="numeric"></div>
+      <div class="settings-row"><label for="cfg-db_max">Max dB</label><input type="number" id="cfg-db_max" step="1" inputmode="numeric"></div>
+      <div class="settings-row"><label for="cfg-db_interval">dB interval</label><input type="number" id="cfg-db_interval" step="1" min="1" inputmode="numeric"></div>
+      <div class="settings-row"><label for="cfg-graph_height">Graph height (0&nbsp;=&nbsp;auto)</label><input type="number" id="cfg-graph_height" step="1" min="0" inputmode="numeric"></div>
       <div class="settings-row">
         <label for="cfg-db_marker_style">dB marker style</label>
         <select id="cfg-db_marker_style">
@@ -1479,7 +1479,7 @@ window.addEventListener('DOMContentLoaded', function () {
           <option value="8192">8192</option>
         </select>
       </div>
-      <div class="settings-row"><label for="cfg-band_count">Band count</label><input type="number" id="cfg-band_count" step="1" min="16" max="256"></div>
+      <div class="settings-row"><label for="cfg-band_count">Band count</label><input type="number" id="cfg-band_count" step="1" min="16" max="256" inputmode="numeric"></div>
       <div class="settings-row">
         <label for="cfg-graph_style">Graph style</label>
         <select id="cfg-graph_style">
@@ -1487,12 +1487,12 @@ window.addEventListener('DOMContentLoaded', function () {
           <option value="line">Line graph</option>
         </select>
       </div>
-      <div class="settings-row"><label for="cfg-gain_db">Gain (dB)</label><input type="number" id="cfg-gain_db" step="0.5"></div>
-      <div class="settings-row"><label for="cfg-band_gap">Band gap (px)</label><input type="number" id="cfg-band_gap" step="1" min="0"></div>
-      <div class="settings-row"><label for="cfg-peak_hold_frames">Peak hold (frames)</label><input type="number" id="cfg-peak_hold_frames" step="1" min="0"></div>
+      <div class="settings-row"><label for="cfg-gain_db">Gain (dB)</label><input type="number" id="cfg-gain_db" step="0.5" inputmode="decimal"></div>
+      <div class="settings-row"><label for="cfg-band_gap">Band gap (px)</label><input type="number" id="cfg-band_gap" step="1" min="0" inputmode="numeric"></div>
+      <div class="settings-row"><label for="cfg-peak_hold_frames">Peak hold (frames)</label><input type="number" id="cfg-peak_hold_frames" step="1" min="0" inputmode="numeric"></div>
       <div class="settings-row"><label for="cfg-peak_db_labels">Peak dB labels</label><input type="checkbox" id="cfg-peak_db_labels"></div>
-      <div class="settings-row"><label for="cfg-history_rows">History rows (0&nbsp;=&nbsp;off)</label><input type="number" id="cfg-history_rows" step="1" min="0"></div>
-      <div class="settings-row"><label for="cfg-history_fps">History speed (fps)</label><input type="number" id="cfg-history_fps" step="1" min="1"></div>
+      <div class="settings-row"><label for="cfg-history_rows">History rows (0&nbsp;=&nbsp;off)</label><input type="number" id="cfg-history_rows" step="1" min="0" inputmode="numeric"></div>
+      <div class="settings-row"><label for="cfg-history_fps">History speed (fps)</label><input type="number" id="cfg-history_fps" step="1" min="1" inputmode="numeric"></div>
       <div class="settings-row"><label for="cfg-history_gradient">History gradient chars</label><input type="text" id="cfg-history_gradient"></div>
     </div>
 
