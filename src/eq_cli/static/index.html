@@ -381,6 +381,7 @@ var CFG = {
   history_color: '#44cccc', axis_color: '#666666', label_color: '#aaaaaa',
   show_title: true,
   show_axis_labels: true, show_shortcuts: false,
+  show_hover_tooltip: false,
   db_marker_style: 'spaced', history_rows: 0,
   history_gradient: ' .:-=+*#%@',
   peak_hold_frames: 0, peak_db_labels: false,
@@ -457,7 +458,8 @@ function openSettings() {
   var fftEl = document.getElementById('cfg-fft_size');
   if (fftEl) { fftEl.value = String(CFG.fft_size || 4096); }
 
-  var boolKeys = ['peak_db_labels', 'show_title', 'show_axis_labels', 'show_shortcuts'];
+  var boolKeys = ['peak_db_labels', 'show_title', 'show_axis_labels', 'show_shortcuts',
+                  'show_hover_tooltip'];
   boolKeys.forEach(function (k) {
     var el = document.getElementById('cfg-' + k);
     if (el) { el.checked = !!CFG[k]; }
@@ -553,7 +555,8 @@ function applySettings() {
     CFG.fft_size = isNaN(fftSize) ? 4096 : fftSize;
   }
 
-  ['peak_db_labels', 'show_title', 'show_axis_labels', 'show_shortcuts'].forEach(function (k) {
+  ['peak_db_labels', 'show_title', 'show_axis_labels', 'show_shortcuts',
+   'show_hover_tooltip'].forEach(function (k) {
     var el = document.getElementById('cfg-' + k);
     if (el) { CFG[k] = el.checked; }
   });
@@ -599,6 +602,11 @@ var frozenLevels = null;    // Float32Array cached when frozen
 var runtimeStatusMessage = 'No device selected';
 
 var PEAK_DECAY_DB = 0.5;
+
+// ── Hover tooltip state ───────────────────────────────────────────────────────
+// CSS-pixel position of the mouse relative to the canvas (or null when the
+// pointer is outside the canvas or the tooltip setting is disabled).
+var hoverPos = null;
 
 function ensurePeakArrays() {
   var n = CFG.band_count;
@@ -942,6 +950,70 @@ function drawPeakDbLabels(peaks) {
   }
 }
 
+// ── Hover tooltip ─────────────────────────────────────────────────────────────
+function drawHoverTooltip() {
+  if (!CFG.show_hover_tooltip || !hoverPos) { return; }
+  var px = hoverPos.x, py = hoverPos.y;
+  var barX = L.barX, barY = L.barY, barW = L.barW, barH = L.barH;
+  if (barW <= 0 || barH <= 0) { return; }
+  if (px < barX || px > barX + barW || py < barY || py > barY + barH) { return; }
+
+  // Map cursor X to a frequency using the same log scale as the band layout.
+  var minHz = BAND_EDGES[0];
+  var maxHz = BAND_EDGES[BAND_EDGES.length - 1];
+  var tx = (px - barX) / barW;
+  if (tx < 0) { tx = 0; } else if (tx > 1) { tx = 1; }
+  var freq = minHz * Math.pow(maxHz / minHz, tx);
+
+  // Map cursor Y to a dB value using the current dB range.
+  var ty = (py - barY) / barH;
+  if (ty < 0) { ty = 0; } else if (ty > 1) { ty = 1; }
+  var db = CFG.db_max - ty * (CFG.db_max - CFG.db_min);
+
+  var freqLabel;
+  if (freq >= 1000) {
+    freqLabel = (freq / 1000).toFixed(freq >= 10000 ? 1 : 2) + ' kHz';
+  } else {
+    freqLabel = freq.toFixed(freq >= 100 ? 0 : 1) + ' Hz';
+  }
+  var dbLabel = (db >= 0 ? '+' : '') + db.toFixed(1) + ' dB';
+
+  // Crosshair lines at the cursor, clipped to the chart area.
+  ctx.fillStyle = CFG.axis_color;
+  ctx.globalAlpha = 0.5;
+  ctx.fillRect(barX, Math.round(py), barW, 1);
+  ctx.fillRect(Math.round(px), barY, 1, barH);
+  ctx.globalAlpha = 1.0;
+
+  // Tooltip box.
+  ctx.font = '11px Consolas,monospace';
+  ctx.textBaseline = 'top';
+  ctx.textAlign = 'left';
+  var padX = 6, padY = 4, lineH = 13;
+  var w1 = ctx.measureText(freqLabel).width;
+  var w2 = ctx.measureText(dbLabel).width;
+  var boxW = Math.ceil(Math.max(w1, w2)) + padX * 2;
+  var boxH = lineH * 2 + padY * 2;
+
+  // Place the box near the cursor, flipping sides when it would clip the chart.
+  var boxX = px + 12;
+  var boxY = py + 12;
+  if (boxX + boxW > barX + barW) { boxX = px - 12 - boxW; }
+  if (boxY + boxH > barY + barH) { boxY = py - 12 - boxH; }
+  if (boxX < barX) { boxX = barX; }
+  if (boxY < barY) { boxY = barY; }
+
+  ctx.fillStyle = 'rgba(13, 17, 23, 0.88)';
+  ctx.fillRect(boxX, boxY, boxW, boxH);
+  ctx.strokeStyle = CFG.axis_color;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(boxX + 0.5, boxY + 0.5, boxW - 1, boxH - 1);
+
+  ctx.fillStyle = CFG.label_color;
+  ctx.fillText(freqLabel, boxX + padX, boxY + padY);
+  ctx.fillText(dbLabel, boxX + padX, boxY + padY + lineH);
+}
+
 // ── Canvas rendering ──────────────────────────────────────────────────────────
 function drawFrame(levels, peaks, isFrozen) {
   var W = L.W, H = L.H;
@@ -1073,6 +1145,7 @@ function drawFrame(levels, peaks, isFrozen) {
     ctx.globalAlpha = 1.0;
   }
 
+  drawHoverTooltip();
 }
 
 // ── Audio setup ───────────────────────────────────────────────────────────────
@@ -1291,6 +1364,17 @@ function wireUi() {
   var _ro = new ResizeObserver(function () { initLayout(); });
   _ro.observe(document.getElementById('canvas-container'));
 
+  // Hover tooltip mouse tracking.  We convert clientX/clientY to CSS pixels
+  // relative to the canvas so positions line up with the layout `L.bar*`
+  // coordinates produced by `initLayout`.
+  canvas.addEventListener('mousemove', function (e) {
+    var rect = canvas.getBoundingClientRect();
+    hoverPos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  });
+  canvas.addEventListener('mouseleave', function () {
+    hoverPos = null;
+  });
+
   // ── Settings panel event wiring ─────────────────────────────────────────────
   document.getElementById('btn-settings').addEventListener('click', openSettings);
   document.getElementById('btn-settings-close').addEventListener('click', closeSettings);
@@ -1417,6 +1501,7 @@ window.addEventListener('DOMContentLoaded', function () {
       <div class="settings-row"><label for="cfg-show_title">Show title</label><input type="checkbox" id="cfg-show_title"></div>
       <div class="settings-row"><label for="cfg-show_axis_labels">Show axis labels</label><input type="checkbox" id="cfg-show_axis_labels"></div>
       <div class="settings-row"><label for="cfg-show_shortcuts">Show shortcuts bar</label><input type="checkbox" id="cfg-show_shortcuts"></div>
+      <div class="settings-row"><label for="cfg-show_hover_tooltip">Show hover tooltip</label><input type="checkbox" id="cfg-show_hover_tooltip"></div>
       <div class="settings-row"><label for="cfg-axis_frequencies">Axis frequencies (Hz, CSV)</label><input type="text" id="cfg-axis_frequencies" placeholder="20,50,100,200,500,1000,2000,5000,10000,20000"></div>
     </div>
     </div>
